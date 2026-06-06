@@ -162,6 +162,15 @@ DRM не защищает от screen capture — только forensic watermar
 | Decouple (развязка) upload от transcode | Kafka: upload → N consumers (transcode, thumbnail, moderation) | Tight coupling (тесная связность), нет масштабирования | Operational complexity Kafka |
 | Backpressure (давление потока) при spike upload | Queue as buffer (очередь как буфер) | Потеря upload или OOM workers | Lag (задержка) в processing |
 
+### Паттерны (из лекции)
+
+- **Chunking** — 2–10 сек единицы для encode и delivery
+- **Pipeline** — upload → transform → store → deliver
+- **CDN = primary delivery** — >90% трафика с edge
+- **Manifest-based streaming** — клиент решает, что запросить
+- **Multi-format** — 1 контент → 10–20 вариантов
+- **Build vs Buy** — S3/Akamai на старте → своё (Open Connect, Cosmos) при масштабе Netflix (15% мирового трафика)
+
 ## 4. Вопросы к авторам архитектуры
 
 _Минимум 5 неочевидных вопросов._
