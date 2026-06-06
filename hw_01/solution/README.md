@@ -131,7 +131,22 @@ DRM не защищает от screen capture — только forensic watermar
 
 ## 3. Проблемы и решения
 
-_Какие проблемы решает каждый компонент._
+### Video Ingest + Transcode Pipeline
+
+| Проблема | Решение | Без этого | Trade-off |
+|----------|---------|-----------|-----------|
+| 500 ч/мин × 10–20 вариантов = 5000–10000 ч/мин кодирования | GOP-chunking + параллельный кластер (54K задач/фильм) | Бэклог растёт бесконечно | GPU 10× дороже CPU — YouTube на Borg (CPU) |
+| 80% YouTube-видео <100 просмотров | Tiered/lazy encoding: 360p+720p сразу, 4K по запросу | $15–60M/год на dead content | Первый зритель 4K ждёт |
+| Разное visual complexity | Per-title encoding (Netflix): My Little Pony @ 1.5 Mbps vs Dark Knight @ 8 Mbps | Перерасход ~20% трафика | Сложнее pipeline |
+
+### CDN / Edge
+
+| Проблема | Решение | Без этого | Trade-off |
+|----------|---------|-----------|-----------|
+| Latency (задержка) и transit cost | CDN PoP + Netflix Open Connect (OCA — сервер прямо у ISP-провайдера) | Origin overload, ISP платит за transit | Netflix ставит железо бесплатно — 1000+ ISP |
+| Live: нельзя prefetch (предзагрузка) | Sliding window origin + fan-out через CDN | WebRTC/SFU (сервер пересылки потоков) не масштабируется на миллионы | Latency 2–30 сек vs <1 сек у WebRTC |
+| Thundering herd (шторм одновременных запросов) | Edge caching + pre-warm для VOD | Spike при релизе | Live остаётся уязвим |
+
 
 ## 4. Вопросы к авторам архитектуры
 
