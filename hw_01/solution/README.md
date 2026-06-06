@@ -104,6 +104,8 @@ Event bus здесь "на критическом пути" — в отличи�
 
 **При сбое:** потерянный кадр при live — навсегда (vs VOD, где можно перекодировать). Thundering herd при старте финала: 10M × 5 Mbps ≈ 50 Tbps.
 
+**Sync/async:** весь pipeline синхронный — RTMP-стрим → чанк → Origin → CDN. Event bus не участвует (в отличие от VOD): задержка на любом шаге = задержка у зрителя.
+
 Схема: [diagrams/seq-live-stream.puml](diagrams/seq-live-stream.puml)
 
 ---
@@ -118,6 +120,10 @@ Event bus здесь "на критическом пути" — в отличи�
 4. Forensic watermarking — уникальная метка на сессию для поиска источника утечки.
 
 DRM не защищает от screen capture — только forensic watermarking + legal.
+
+**Sync/async:** весь поток синхронный и блокирующий — player не начнёт воспроизведение до ответа License Server. License Server на критическом пути: его недоступность = ошибка пользователю (нет асинхронного fallback).
+
+**При сбое:** License Server недоступен → воспроизведение невозможно. Истёкший ключ в TEE → повторный запрос лицензии (прозрачно для пользователя).
 
 Схема: [diagrams/seq-drm.puml](diagrams/seq-drm.puml)
 
