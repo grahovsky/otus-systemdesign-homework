@@ -147,6 +147,20 @@ DRM не защищает от screen capture — только forensic watermar
 | Live: нельзя prefetch (предзагрузка) | Sliding window origin + fan-out через CDN | WebRTC/SFU (сервер пересылки потоков) не масштабируется на миллионы | Latency 2–30 сек vs <1 сек у WebRTC |
 | Thundering herd (шторм одновременных запросов) | Edge caching + pre-warm для VOD | Spike при релизе | Live остаётся уязвим |
 
+### Manifest + ABR
+
+| Проблема | Решение | Без этого | Trade-off |
+|----------|---------|-----------|-----------|
+| Один файл 1080p не работает в метро | Chunking (2 сек) + multi-bitrate ladder + ABR | Rebuffer, уход пользователя | Десятки тысяч файлов на 1 видео |
+| Скачки качества | MPC/BOLA алгоритмы, оптимизация QoE | Плохой UX | Сложность клиента |
+| Rebuffer rate | Buffer 4+ сек, conservative downgrade | >0.5% rebuffer = проблема | Чуть ниже avg bitrate |
+
+### Event Bus
+
+| Проблема | Решение | Без этого | Trade-off |
+|----------|---------|-----------|-----------|
+| Decouple (развязка) upload от transcode | Kafka: upload → N consumers (transcode, thumbnail, moderation) | Tight coupling (тесная связность), нет масштабирования | Operational complexity Kafka |
+| Backpressure (давление потока) при spike upload | Queue as buffer (очередь как буфер) | Потеря upload или OOM workers | Lag (задержка) в processing |
 
 ## 4. Вопросы к авторам архитектуры
 
