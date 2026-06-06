@@ -1,0 +1,39 @@
+@startuml seq-drm
+title Поток данных: защита контента (DRM + Watermark)
+
+left to right direction
+skinparam defaultFontSize 12
+
+actor Viewer as viewer
+rectangle "Client Player\n(TEE)" as player
+rectangle "CDN Edge" as cdn
+rectangle "Video Serving" as serving
+rectangle "Watermark Service" as wm
+rectangle "DRM License Server" as license
+
+viewer   --> player  : Play premium content
+player   --> cdn     : GET manifest
+cdn      --> serving : origin pull
+serving  --> wm      : generate session watermark\n(user_id, device, timestamp)
+wm       --> serving : watermark token
+serving  --> cdn     : manifest (key_id, no key, wm_token)
+cdn      --> player  : manifest
+
+player   --> license : key_id + device_token + session
+license  --> player  : AES key\n(L1 → 4K HDR | L3/Chrome → 720p)
+
+cdn      --> player  : encrypted chunks (.m4s)
+player   --> player  : decrypt in TEE → render\n(watermark встроен в поток)
+
+note bottom of license
+  проверяет: подписку, geo,
+  device attestation, Widevine level
+end note
+
+note bottom of player
+  screen capture обходит DRM,
+  но не watermark →
+  пиратская копия → извлечь метку → аккаунт/время
+end note
+
+@enduml

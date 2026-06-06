@@ -8,12 +8,23 @@ actor Streamer as streamer
 rectangle "Ingest Server\n(~100 PoP)" as ingest
 rectangle "Real-time Transcoder\n(H.264, 3 качества)" as transcode
 rectangle "Origin Server\n(sliding window)" as origin
+rectangle "CDN Edge" as cdn
 actor Viewer as viewer
 
 streamer  --> ingest    : RTMP push (OBS)
 ingest    --> transcode : raw frames
 transcode --> origin    : HLS chunks (2 сек)\n< 1 сек latency budget
+origin    --> cdn       : latest N chunks\ncache hit = 0% (live)
+cdn       --> viewer    : fan-out (миллионы зрителей)
 
-viewer --> origin
+note bottom of cdn
+  10M × 5 Mbps ≈ 50 Tbps peak
+  Thundering herd при старте события
+end note
+
+note bottom of transcode
+  ошибка = потерянный кадр навсегда
+  (vs VOD: можно перекодировать)
+end note
 
 @enduml

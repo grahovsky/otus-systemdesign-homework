@@ -119,6 +119,8 @@ Event bus здесь "на критическом пути" — в отличи�
 
 DRM не защищает от screen capture — только forensic watermarking + legal.
 
+Схема: [diagrams/seq-drm.puml](diagrams/seq-drm.puml)
+
 ---
 
 ## 3. Проблемы и решения
