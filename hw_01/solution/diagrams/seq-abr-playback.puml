@@ -6,15 +6,28 @@ skinparam defaultFontSize 12
 
 actor Viewer as viewer
 rectangle "Client Player\n(ABR)" as player
+rectangle "CDN Edge" as cdn
 rectangle "Video Serving" as serving
 rectangle "DRM License Server" as drm
 rectangle "Analytics" as analytics
 
 viewer   --> player  : Play
+player   --> cdn     : GET manifest
+cdn      --> serving : origin pull (cache miss)
+serving  --> cdn     : manifest (variants + key_id)
+cdn      --> player  : manifest
 
 player   --> drm     : key_id + device token
 drm      --> player  : AES key\n(L1 → 4K, L3/Chrome → 720p)
 
+player   --> cdn     : GET chunk (ABR-выбор качества)
+cdn      --> player  : chunk (.ts / .m4s)\ncache hit >95% для VOD
+
 player   --> analytics : buffer_health, position_sec [async]
+
+note bottom of cdn
+  Cache miss → origin pull (latency spike)
+  CDN failure → retry другой PoP + downgrade bitrate
+end note
 
 @enduml
