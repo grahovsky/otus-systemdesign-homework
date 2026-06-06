@@ -48,6 +48,9 @@
 | 4 | Object Storage | Хранилище | Original + все варианты: `[resolution/codec/chunkNNN]` | Stateful |
 | 5 | Event Bus (Kafka/SQS) | Очередь событий | `video.uploaded` → `video.transcoded` → `video.published` → `video.watched` | Stateful (log) |
 | 6 | Video Serving | Сервис | Генерация manifest (`.m3u8`/`.mpd`), URL чанков, DRM packaging | Stateless |
+| 7 | CDN / Edge | CDN | Кеширование и отдача чанков из PoP (точка присутствия) ближе к пользователю (Open Connect, Google Edge) | Stateful (cache) |
+| 8 | Metadata Service | Сервис | Каталог, пользователи, права, рекомендации | Stateless |
+| 9 | Metadata Store | БД | SQL/NoSQL: метаданные видео, профили, подписки | Stateful |
 
 Event bus здесь "на критическом пути" — в отличие от облачного хранилища, где он вспомогательный. Без него upload не превращается в готовый к просмотру контент.
 
