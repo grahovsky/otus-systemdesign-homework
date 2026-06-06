@@ -87,6 +87,8 @@ Event bus здесь "на критическом пути" — в отличи�
 
 **При сбое:** CDN miss → origin pull (latency spike); persistent CDN failure → retry другой PoP + downgrade bitrate; DRM failure → ошибка пользователю, plaintext fallback невозможен.
 
+Схема: [diagrams/seq-abr-playback.puml](diagrams/seq-abr-playback.puml)
+
 ---
 
 ### 2.3. Live-трансляция

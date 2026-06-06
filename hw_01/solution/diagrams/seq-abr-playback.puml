@@ -1,0 +1,20 @@
+@startuml seq-abr-playback
+title Поток данных: адаптивное воспроизведение (VOD + ABR)
+
+left to right direction
+skinparam defaultFontSize 12
+
+actor Viewer as viewer
+rectangle "Client Player\n(ABR)" as player
+rectangle "Video Serving" as serving
+rectangle "DRM License Server" as drm
+rectangle "Analytics" as analytics
+
+viewer   --> player  : Play
+
+player   --> drm     : key_id + device token
+drm      --> player  : AES key\n(L1 → 4K, L3/Chrome → 720p)
+
+player   --> analytics : buffer_health, position_sec [async]
+
+@enduml
