@@ -58,7 +58,62 @@ Event bus здесь "на критическом пути" — в отличи�
 
 ## 2. Потоки данных
 
-_3–5 ключевых сценариев со схемами._
+### 2.1. Загрузка и транскодирование (VOD upload)
+
+**Путь:** Creator → API Gateway → Video Ingest → Object Storage → Event Bus → Transcode Pipeline → Object Storage → Event Bus → Metadata Service.
+
+1. Клиент инициирует resumable upload, шлёт чанки.
+2. Ingest сохраняет original в Object Storage, публикует `video.uploaded`.
+3. Transcode Pipeline разбивает видео на GOP-чанки (2–10 сек) и параллельно кодирует каждый в 10–20 вариантов. Фильм 2 ч ≈ 3600 чанков × 15 вариантов = 54 000 задач на кластер (Borg/Cosmos).
+4. Результат: master manifest + десятки тысяч маленьких файлов в storage.
+5. `video.transcoded` → Metadata Service помечает видео как ready.
+
+**Sync/async:** upload — синхронный HTTP; transcode — полностью асинхронный через event bus.
+
+**При сбое:** resumable upload переживает обрыв сети; failed encode job — retry на другом worker; при падении Kafka — backlog, видео «зависает» в processing.
+
+---
+
+### 2.2. Адаптивное воспроизведение (VOD playback + ABR)
+
+**Путь:** Viewer → Client Player → CDN (manifest + chunks) → [DRM License Server].
+
+1. Player запрашивает master manifest — список всех вариантов качества и URL чанков.
+2. ABR-алгоритм (throughput-based, buffer-based, MPC у Netflix) выбирает качество следующего чанка по скорости канала и уровню буфера.
+3. Player скачивает 2-секундные чанки с CDN Edge. Cache hit для VOD >95%.
+4. При переходе Wi-Fi → 3G player переключается 1080p → 480p → 360p без остановки (буфер ~4 сек).
+
+**Sync/async:** полностью синхронный pull-модель HTTP; аналитика (`buffer_health`, `position_sec`) — асинхронная отправка событий.
+
+**При сбое:** CDN miss → origin pull (latency spike); persistent CDN failure → retry другой PoP + downgrade bitrate; DRM failure → ошибка пользователю, plaintext fallback невозможен.
+
+---
+
+### 2.3. Live-трансляция
+
+**Путь:** Streamer (OBS) → Ingest Server (RTMP) → Real-time Transcoder → Origin (sliding window) → CDN → Viewers.
+
+1. Стример пушит RTMP на ближайший ingest PoP (~100 по миру).
+2. Transcoder кодирует каждый 2-сек чанк **быстрее real-time** (<1 сек budget) в 3 качества H.264.
+3. Origin хранит последние N чанков; CDN fan-out к миллионам зрителей.
+4. Cache hit для live = **0%** для первого чанка — контент появляется в реальном времени.
+
+**При сбое:** потерянный кадр при live — навсегда (vs VOD, где можно перекодировать). Thundering herd при старте финала: 10M × 5 Mbps ≈ 50 Tbps.
+
+---
+
+### 2.4. Защита premium-контента (DRM)
+
+**Путь:** Player → Video Serving (manifest без ключа) → DRM License Server → TEE на устройстве.
+
+1. Manifest содержит `key_id`, но не ключ.
+2. License Server проверяет подписку, geo, device attestation.
+3. Ключ расшифровывается в hardware TEE (доверенная среда выполнения): Widevine L1 → 4K; L3 в Chrome → max 720p.
+4. Forensic watermarking — уникальная метка на сессию для поиска источника утечки.
+
+DRM не защищает от screen capture — только forensic watermarking + legal.
+
+---
 
 ## 3. Проблемы и решения
 
