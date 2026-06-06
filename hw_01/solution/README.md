@@ -35,9 +35,23 @@
 
 **Почему не «файл в Dropbox»:** единица контента — не один файл, а 10–20 вариантов × тысячи 2-секундных чанков; паттерн доступа 1:100K–100M; upload требует часов CPU; latency >2 сек = уход пользователя; download >> upload (100–1000×).
 
+---
+
 ## 1. Компоненты
 
-_Основные сервисы и их ответственности (5–10 компонентов)._
+
+| # | Компонент | Тип | Ответственность | Stateful / Stateless |
+|---|-----------|-----|-----------------|---------------------|
+| 1 | API Gateway / Load Balancer | Балансировщик | TLS, маршрутизация, rate limiting | Stateless |
+| 2 | Video Ingest | Сервис | Resumable upload (загрузка с докачкой, валидация, GOP-based chunking исходника (GOP — группа кадров) | Stateless |
+| 3 | Transcode Pipeline | Worker pool | Параллельное кодирование в quality ladder (лестница качества: 1080p/720p/480p × H.264/VP9/AV1); per-title encoding (Netflix) | Stateless workers |
+| 4 | Object Storage | Хранилище | Original + все варианты: `[resolution/codec/chunkNNN]` | Stateful |
+| 5 | Event Bus (Kafka/SQS) | Очередь событий | `video.uploaded` → `video.transcoded` → `video.published` → `video.watched` | Stateful (log) |
+| 6 | Video Serving | Сервис | Генерация manifest (`.m3u8`/`.mpd`), URL чанков, DRM packaging | Stateless |
+
+Event bus здесь "на критическом пути" — в отличие от облачного хранилища, где он вспомогательный. Без него upload не превращается в готовый к просмотру контент.
+
+---
 
 ## 2. Потоки данных
 
