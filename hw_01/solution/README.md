@@ -72,6 +72,8 @@ Event bus здесь "на критическом пути" — в отличи�
 
 **При сбое:** resumable upload переживает обрыв сети; failed encode job — retry на другом worker; при падении Kafka — backlog, видео «зависает» в processing.
 
+Схема: [diagrams/seq-upload-transcode.puml](diagrams/seq-upload-transcode.puml)
+
 ---
 
 ### 2.2. Адаптивное воспроизведение (VOD playback + ABR)
