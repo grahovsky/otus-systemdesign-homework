@@ -1,0 +1,19 @@
+@startuml seq-live-stream
+title Поток данных: live-трансляция
+
+left to right direction
+skinparam defaultFontSize 12
+
+actor Streamer as streamer
+rectangle "Ingest Server\n(~100 PoP)" as ingest
+rectangle "Real-time Transcoder\n(H.264, 3 качества)" as transcode
+rectangle "Origin Server\n(sliding window)" as origin
+actor Viewer as viewer
+
+streamer  --> ingest    : RTMP push (OBS)
+ingest    --> transcode : raw frames
+transcode --> origin    : HLS chunks (2 сек)\n< 1 сек latency budget
+
+viewer --> origin
+
+@enduml

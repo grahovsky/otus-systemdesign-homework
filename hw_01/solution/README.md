@@ -104,6 +104,8 @@ Event bus здесь "на критическом пути" — в отличи�
 
 **При сбое:** потерянный кадр при live — навсегда (vs VOD, где можно перекодировать). Thundering herd при старте финала: 10M × 5 Mbps ≈ 50 Tbps.
 
+Схема: [diagrams/seq-live-stream.puml](diagrams/seq-live-stream.puml)
+
 ---
 
 ### 2.4. Защита premium-контента (DRM)
