@@ -1,1 +1,10 @@
 /.idea/***
+
+.*
+!.gitignore
+!.gitattributes
+
+# PlantUML tooling and generated diagrams (source: *.puml)
+plantuml.jar
+**/*.png
+**/*.svg
