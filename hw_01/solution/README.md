@@ -129,6 +129,18 @@ DRM не защищает от screen capture — только forensic watermar
 
 Схема: [diagrams/seq-drm.puml](diagrams/seq-drm.puml)
 
+### 2.5. Аналитика просмотров и рекомендации
+
+**Путь:** Client Player → API Gateway → Event Bus → Analytics Pipeline (Beam → BigQuery) → Metadata Service / Recommendation Engine.
+
+События: `position_sec` (heatmap «Most Replayed»), drop-off points (retention curve), `buffer_health` (QoE по регионам), skip patterns.
+
+~100B+ событий/день на YouTube. Offline batch (обновление раз в час) vs online re-rank при каждом открытии — trade-off свежести и compute.
+
+**При сбое:** потеря событий → деградация рекомендаций, не блокирует playback.
+
+Схема: [diagrams/seq-analytics.puml](diagrams/seq-analytics.puml)
+
 ---
 
 ## 3. Проблемы и решения
