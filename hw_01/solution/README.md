@@ -1,24 +1,200 @@
 # ДЗ 1. Анализ референсной архитектуры — решение
 
-> Условие: [../Задание.md](../Задание.md) · Чек-лист: [../Чеклист.md](../Чеклист.md)
-> Схемы складывайте в [diagrams/](diagrams/).
+> Условие: [../Задание.md](../Задание.md) · Чек-лист: [../Чеклист.md](../Чеклист.md)  
+> Схемы: [diagrams/](diagrams/)
 
 ## Выбранная архитектура
 
-_Облачное хранилище / рекламная система / видеостриминг / сервис такси._
+**Видеостриминг** (YouTube / Netflix) — занятие 4: кодирование, CDN, адаптивный стриминг
+
+---
+
+## 0. Контекст системы
+
+**Что делает система:** принимает видеоконтент (upload или live), обрабатывает его в десятки вариантов (resolution × codec × temporal chunks), хранит и доставляет зрителям с адаптивным качеством под пропускную способность канала.
+
+**Акторы:**
+
+| Актор | Зачем обращается |
+|-------|------------------|
+| Зритель | VOD (видео по запросу) и live на Smart TV, mobile, web, console |
+| Создатель контента (UGC — пользовательский контент) | Загрузка видео (YouTube) или RTMP-трансляция (Twitch) |
+| Контент-партнёр | Поставка мастер-файлов ProRes/IMF (Netflix, Кинопоиск) |
+| Рекламодатель / аналитик | QoE-метрики (воспринимаемое качество), retention (удержание аудитории), heatmap (тепловая карта активности) |
+
+**Ключевые сценарии:** upload → transcode → publish; VOD playback с ABR (адаптивный битрейт); live streaming; аналитика просмотров и рекомендации; защита premium-контента (DRM — управление цифровыми правами).
+
+**Масштаб (порядок величин):**
+
+| Платформа | Каталог | Просмотры | Upload | CDN peak |
+|-----------|---------|-----------|--------|----------|
+| YouTube | 800M+ видео | 1B+ часов/день | 500 ч/мин | 100+ Tbps |
+| Netflix | ~17K тайтлов | ~160M часов/день | Centralized | ~15% мирового трафика |
+| Twitch | ~10M стримеров | ~30M зрителей | 7.5M стримеров/мес | ~3% мирового трафика |
+| Кинопоиск | ~200К тайтлов | ~5M | Centralized | Сотни Gbps |
+
+**Почему не «файл в Dropbox»:** единица контента — не один файл, а 10–20 вариантов × тысячи 2-секундных чанков; паттерн доступа 1:100K–100M; upload требует часов CPU; latency >2 сек = уход пользователя; download >> upload (100–1000×).
+
+Контекстная схема (C4 Level 1): [diagrams/c4-context.puml](diagrams/c4-context.puml)
+
+---
 
 ## 1. Компоненты
 
-_Основные сервисы и их ответственности (5–10 компонентов)._
+
+| # | Компонент | Тип | Ответственность | Stateful / Stateless |
+|---|-----------|-----|-----------------|---------------------|
+| 1 | API Gateway / Load Balancer | Балансировщик | TLS, маршрутизация, rate limiting | Stateless |
+| 2 | Video Ingest | Сервис | Resumable upload (загрузка с докачкой, валидация, GOP-based chunking исходника (GOP — группа кадров) | Stateless |
+| 3 | Transcode Pipeline | Worker pool | Параллельное кодирование в quality ladder (лестница качества: 1080p/720p/480p × H.264/VP9/AV1); per-title encoding (Netflix) | Stateless workers |
+| 4 | Object Storage | Хранилище | Original + все варианты: `[resolution/codec/chunkNNN]` | Stateful |
+| 5 | Event Bus (Kafka/SQS) | Очередь событий | `video.uploaded` → `video.transcoded` → `video.published` → `video.watched` | Stateful (log) |
+| 6 | Video Serving | Сервис | Генерация manifest (`.m3u8`/`.mpd`), URL чанков, DRM packaging | Stateless |
+| 7 | CDN / Edge | CDN | Кеширование и отдача чанков из PoP (точка присутствия) ближе к пользователю (Open Connect, Google Edge) | Stateful (cache) |
+| 8 | Metadata Service | Сервис | Каталог, пользователи, права, рекомендации | Stateless |
+| 9 | Metadata Store | БД | SQL/NoSQL: метаданные видео, профили, подписки | Stateful |
+
+Event bus здесь "на критическом пути" — в отличие от облачного хранилища, где он вспомогательный. Без него upload не превращается в готовый к просмотру контент.
+
+---
 
 ## 2. Потоки данных
 
-_3–5 ключевых сценариев со схемами._
+### 2.1. Загрузка и транскодирование (VOD upload)
+
+**Путь:** Creator → API Gateway → Video Ingest → Object Storage → Event Bus → Transcode Pipeline → Object Storage → Event Bus → Metadata Service.
+
+1. Клиент инициирует resumable upload, шлёт чанки.
+2. Ingest сохраняет original в Object Storage, публикует `video.uploaded`.
+3. Transcode Pipeline разбивает видео на GOP-чанки (2–10 сек) и параллельно кодирует каждый в 10–20 вариантов. Фильм 2 ч ≈ 3600 чанков × 15 вариантов = 54 000 задач на кластер (Borg/Cosmos).
+4. Результат: master manifest + десятки тысяч маленьких файлов в storage.
+5. `video.transcoded` → Metadata Service помечает видео как ready.
+
+**Sync/async:** upload — синхронный HTTP; transcode — полностью асинхронный через event bus.
+
+**При сбое:** resumable upload переживает обрыв сети; failed encode job — retry на другом worker; при падении Kafka — backlog, видео «зависает» в processing.
+
+Схема: [diagrams/seq-upload-transcode.puml](diagrams/seq-upload-transcode.puml)
+
+---
+
+### 2.2. Адаптивное воспроизведение (VOD playback + ABR)
+
+**Путь:** Viewer → Client Player → CDN (manifest + chunks) → [DRM License Server].
+
+1. Player запрашивает master manifest — список всех вариантов качества и URL чанков.
+2. ABR-алгоритм (throughput-based, buffer-based, MPC у Netflix) выбирает качество следующего чанка по скорости канала и уровню буфера.
+3. Player скачивает 2-секундные чанки с CDN Edge. Cache hit для VOD >95%.
+4. При переходе Wi-Fi → 3G player переключается 1080p → 480p → 360p без остановки (буфер ~4 сек).
+
+**Sync/async:** полностью синхронный pull-модель HTTP; аналитика (`buffer_health`, `position_sec`) — асинхронная отправка событий.
+
+**При сбое:** CDN miss → origin pull (latency spike); persistent CDN failure → retry другой PoP + downgrade bitrate; DRM failure → ошибка пользователю, plaintext fallback невозможен.
+
+Схема: [diagrams/seq-abr-playback.puml](diagrams/seq-abr-playback.puml)
+
+---
+
+### 2.3. Live-трансляция
+
+**Путь:** Streamer (OBS) → Ingest Server (RTMP) → Real-time Transcoder → Origin (sliding window) → CDN → Viewers.
+
+1. Стример пушит RTMP на ближайший ingest PoP (~100 по миру).
+2. Transcoder кодирует каждый 2-сек чанк **быстрее real-time** (<1 сек budget) в 3 качества H.264.
+3. Origin хранит последние N чанков; CDN fan-out к миллионам зрителей.
+4. Cache hit для live = **0%** для первого чанка — контент появляется в реальном времени.
+
+**При сбое:** потерянный кадр при live — навсегда (vs VOD, где можно перекодировать). Thundering herd при старте финала: 10M × 5 Mbps ≈ 50 Tbps.
+
+**Sync/async:** весь pipeline синхронный — RTMP-стрим → чанк → Origin → CDN. Event bus не участвует (в отличие от VOD): задержка на любом шаге = задержка у зрителя.
+
+Схема: [diagrams/seq-live-stream.puml](diagrams/seq-live-stream.puml)
+
+---
+
+### 2.4. Защита premium-контента (DRM)
+
+**Путь:** Player → Video Serving (manifest без ключа) → DRM License Server → TEE на устройстве.
+
+1. Manifest содержит `key_id`, но не ключ.
+2. License Server проверяет подписку, geo, device attestation.
+3. Ключ расшифровывается в hardware TEE (доверенная среда выполнения): Widevine L1 → 4K; L3 в Chrome → max 720p.
+4. Forensic watermarking — уникальная метка на сессию для поиска источника утечки.
+
+DRM не защищает от screen capture — только forensic watermarking + legal.
+
+**Sync/async:** весь поток синхронный и блокирующий — player не начнёт воспроизведение до ответа License Server. License Server на критическом пути: его недоступность = ошибка пользователю (нет асинхронного fallback).
+
+**При сбое:** License Server недоступен → воспроизведение невозможно. Истёкший ключ в TEE → повторный запрос лицензии (прозрачно для пользователя).
+
+Схема: [diagrams/seq-drm.puml](diagrams/seq-drm.puml)
+
+### 2.5. Аналитика просмотров и рекомендации
+
+**Путь:** Client Player → API Gateway → Event Bus → Analytics Pipeline (Beam → BigQuery) → Metadata Service / Recommendation Engine.
+
+События: `position_sec` (heatmap «Most Replayed»), drop-off points (retention curve), `buffer_health` (QoE по регионам), skip patterns.
+
+~100B+ событий/день на YouTube. Offline batch (обновление раз в час) vs online re-rank при каждом открытии — trade-off свежести и compute.
+
+**При сбое:** потеря событий → деградация рекомендаций, не блокирует playback.
+
+Схема: [diagrams/seq-analytics.puml](diagrams/seq-analytics.puml)
+
+---
 
 ## 3. Проблемы и решения
 
-_Какие проблемы решает каждый компонент._
+### Video Ingest + Transcode Pipeline
+
+| Проблема | Решение | Без этого | Trade-off |
+|----------|---------|-----------|-----------|
+| 500 ч/мин × 10–20 вариантов = 5000–10000 ч/мин кодирования | GOP-chunking + параллельный кластер (54K задач/фильм) | Бэклог растёт бесконечно | GPU 10× дороже CPU — YouTube на Borg (CPU) |
+| 80% YouTube-видео <100 просмотров | Tiered/lazy encoding: 360p+720p сразу, 4K по запросу | $15–60M/год на dead content | Первый зритель 4K ждёт |
+| Разное visual complexity | Per-title encoding (Netflix): My Little Pony @ 1.5 Mbps vs Dark Knight @ 8 Mbps | Перерасход ~20% трафика | Сложнее pipeline |
+
+### CDN / Edge
+
+| Проблема | Решение | Без этого | Trade-off |
+|----------|---------|-----------|-----------|
+| Latency (задержка) и transit cost | CDN PoP + Netflix Open Connect (OCA — сервер прямо у ISP-провайдера) | Origin overload, ISP платит за transit | Netflix ставит железо бесплатно — 1000+ ISP |
+| Live: нельзя prefetch (предзагрузка) | Sliding window origin + fan-out через CDN | WebRTC/SFU (сервер пересылки потоков) не масштабируется на миллионы | Latency 2–30 сек vs <1 сек у WebRTC |
+| Thundering herd (шторм одновременных запросов) | Edge caching + pre-warm для VOD | Spike при релизе | Live остаётся уязвим |
+
+### Manifest + ABR
+
+| Проблема | Решение | Без этого | Trade-off |
+|----------|---------|-----------|-----------|
+| Один файл 1080p не работает в метро | Chunking (2 сек) + multi-bitrate ladder + ABR | Rebuffer, уход пользователя | Десятки тысяч файлов на 1 видео |
+| Скачки качества | MPC/BOLA алгоритмы, оптимизация QoE | Плохой UX | Сложность клиента |
+| Rebuffer rate | Buffer 4+ сек, conservative downgrade | >0.5% rebuffer = проблема | Чуть ниже avg bitrate |
+
+### Event Bus
+
+| Проблема | Решение | Без этого | Trade-off |
+|----------|---------|-----------|-----------|
+| Decouple (развязка) upload от transcode | Kafka: upload → N consumers (transcode, thumbnail, moderation) | Tight coupling (тесная связность), нет масштабирования | Operational complexity Kafka |
+| Backpressure (давление потока) при spike upload | Queue as buffer (очередь как буфер) | Потеря upload или OOM workers | Lag (задержка) в processing |
+
+### Паттерны (из лекции)
+
+- **Chunking** — 2–10 сек единицы для encode и delivery
+- **Pipeline** — upload → transform → store → deliver
+- **CDN = primary delivery** — >90% трафика с edge
+- **Manifest-based streaming** — клиент решает, что запросить
+- **Multi-format** — 1 контент → 10–20 вариантов
+- **Build vs Buy** — S3/Akamai на старте → своё (Open Connect, Cosmos) при масштабе Netflix (15% мирового трафика)
 
 ## 4. Вопросы к авторам архитектуры
 
-_Минимум 5 неочевидных вопросов._
+1. **Tiered encoding:** по какому сигналу YouTube решает, что видео «cold» и 4K/VP9 можно отложить — только view count или ещё канал подписчика, гео, trending? Какой SLA обещают первому зрителю 4K?
+
+2. **Event bus как SPOF (единая точка отказа):** Kafka на критическом пути transcode. Как устроен recovery при длительном сбое — replay from offset, dead letter queue, ручной перезапуск задачи? Какой допустимый lag перед эскалацией?
+
+3. **Open Connect economics:** Netflix ставит OCA-серверы (Open Connect Appliance) бесплатно у провайдеров (ISP). Кто решает, сколько диска и какой тайтл pre-position на OCA до релиза нового сезона в пятницу?
+
+4. **Live-to-VOD переключение:** instant VOD (H.264, 3 качества) заменяется оптимизированным VP9/AV1 через 2–4 часа после окончания трансляции. Как player переключается между версиями для пользователя, который досматривает запись сразу после окончания стрима?
+
+5. **DRM L3 компрометация (2019):** после взлома Widevine L3 в Chrome — меняли ли архитектуру license server (rate limit, device fingerprint) или приняли 720p cap как неизбежную издержку?
+
+6. **ABR на клиенте vs edge:** Netflix перешёл с buffer-based на MPC. Рассматривали ли централизованный выбор качества на edge — с данными о пропускной способности сети на уровне CDN? Почему оставили decision на клиенте, а не перенесли логику ABR на сторону CDN?

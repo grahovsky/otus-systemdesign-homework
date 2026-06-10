@@ -1,0 +1,32 @@
+@startuml seq-analytics
+title Поток данных: аналитика просмотров и рекомендации
+
+left to right direction
+skinparam defaultFontSize 12
+
+actor Viewer as viewer
+rectangle "Client Player" as player
+rectangle "API Gateway" as gw
+queue "Event Bus\n(Kafka)" as kafka
+rectangle "Analytics Pipeline\n(Beam → BigQuery)" as beam
+database "Metadata Store" as meta
+rectangle "Recommendation Engine" as rec
+
+player   --> gw    : watch events batch\n(position_sec, drop-off points,\nbuffer_health, skip patterns)
+gw       --> kafka : video.watched\n(~100B+ событий/день)
+
+kafka    --> beam  : stream processing
+beam     --> meta  : QoE-метрики (rebuffer_rate, retention)\nCDN health алерты
+beam     --> rec   : обновление признаков (batch, ~1 ч)
+rec      --> meta  : updated recommendations
+
+viewer   --> gw    : GET /recommendations
+gw       --> meta  : read top-K for user
+meta     --> viewer : персональная лента
+
+note bottom of rec
+  offline batch (~1 ч) vs online re-rank (при каждом открытии)
+  сбой pipeline → fallback на popularity-based, плейбэк не блокируется
+end note
+
+@enduml

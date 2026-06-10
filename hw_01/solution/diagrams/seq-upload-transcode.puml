@@ -1,0 +1,29 @@
+@startuml seq-upload-transcode
+title Поток данных: загрузка и транскодирование (VOD)
+
+left to right direction
+skinparam defaultFontSize 12
+
+actor Creator as cr
+rectangle "Video Ingest" as ingest
+database "Object Storage" as s3
+queue "Event Bus\n(Kafka)" as kafka
+rectangle "Transcode Pipeline\n(Borg / Cosmos)" as transcode
+rectangle "Metadata Service" as meta
+
+cr        --> ingest    : chunks (resumable upload)
+ingest    --> s3        : original file
+ingest    --> kafka     : video.uploaded
+kafka     --> transcode : video.uploaded
+s3        --> transcode : read original
+transcode --> s3        : HLS/DASH chunks + manifest\n(~54K задач / фильм 2 ч)
+transcode --> kafka     : video.transcoded
+kafka     --> meta      : video.transcoded
+meta      --> cr        : webhook: video ready
+
+note bottom of kafka
+  на критическом пути:
+  без него видео не обработается
+end note
+
+@enduml

@@ -1,0 +1,28 @@
+@startuml c4-context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title Контекст: платформа видеостриминга (YouTube / Netflix)
+
+Person(viewer, "Зритель", "Смотрит VOD и live на TV, mobile, web")
+Person(creator, "Создатель контента", "Загружает видео или ведёт трансляцию")
+Person(partner, "Контент-партнёр", "Поставляет мастер-файлы (Netflix, Кинопоиск)")
+
+System(streaming, "Платформа видеостриминга", "Приём, обработка, хранение и доставка видео с адаптивным качеством")
+
+System_Ext(cdn, "CDN / Edge", "Кеширование и отдача чанков ближе к пользователю")
+System_Ext(drm, "DRM License Server", "Выдача ключей расшифровки: проверяет подписку, гео, устройство")
+
+Rel(viewer, streaming, "Смотрит видео, получает рекомендации", "HTTPS / HLS-DASH")
+Rel(creator, streaming, "Upload / RTMP ingest", "HTTPS / RTMP")
+Rel(partner, streaming, "Партнёрский ingest", "Aspera / API")
+Rel(streaming, cdn, "Публикует чанки и манифесты (с key_id, без ключа)")
+Rel(viewer, cdn, "Скачивает манифест и чанки", "HTTPS")
+Rel(viewer, drm, "Запрос лицензии (key_id + device token)", "HTTPS")
+
+note right of drm
+  Платформа НЕ посредник для DRM:
+  viewer обращается к License Server
+  напрямую с key_id из манифеста
+end note
+
+@enduml
