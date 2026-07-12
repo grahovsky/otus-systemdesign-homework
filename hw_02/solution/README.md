@@ -5,11 +5,29 @@
 
 ## Выбранная система
 
-_Доставка еды / платёжный сервис / сервис бронирования / своя (согласована с преподавателем)._
+**Сервис бронирования (Bookly)** — аналог Booking.com: поиск, soft-hold инвентаря, оплата, отмены.
+
+Формат документации — LikeC4 (C1/C2) + arc42 §1/§4/§5/§9 + ADR.
+ER/PlantUML - для моделей данных (hw_03)
+
+---
 
 ## 1. Декомпозиция
 
-_6–8 сервисов с описанием ответственности._
+8 сервисов — см. [arc42 §4](arc42/04-solution-strategy.md#41-декомпозиция-8-сервисов) и C2.
+
+| Сервис | Ответственность |
+|---|---|
+| API Gateway | Edge, auth, REST/GraphQL → gRPC |
+| Identity | Аккаунты, JWT, роли |
+| Catalog | Объекты, room types, тарифы |
+| Search | CQRS read-model (гео/фильтры) |
+| Inventory | Аллотмент, soft-hold TTL, confirm/release |
+| Booking | Агрегат брони + оркестратор Saga |
+| Payment | PaymentIntent, confirm/refund, idempotency, webhooks |
+| Notification | Email/SMS по событиям |
+
+---
 
 ## 2. Протоколы
 

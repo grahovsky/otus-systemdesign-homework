@@ -1,0 +1,28 @@
+# arc42 §4 — Solution Strategy
+
+> Детали решений — в ADR (§9). Схемы — LikeC4 C1/C2.
+
+## 4.0 Общий подход
+
+Bookly — **микросервисная** система с чётким разделением write-path бронирования
+и read-path поиска.
+
+## 4.1 Декомпозиция (8 сервисов)
+
+| # | Сервис | Ответственность | Не делает |
+|---|---|---|---|
+| 1 | **API Gateway** | TLS, JWT, rate limit, REST/GraphQL → gRPC | Бизнес-логика брони |
+| 2 | **Identity** | Аккаунты, роли guest/partner/admin, JWT | Платежи, инвентарь |
+| 3 | **Catalog** | Объекты, room types, контент, rate plans | Календарь слотов |
+| 4 | **Search** | Геопоиск/фильтры (CQRS read-model) | Soft-hold, оплата |
+| 5 | **Inventory** | Аллотмент, soft-hold TTL, confirm/release | Оркестрация оплаты |
+| 6 | **Booking** | Агрегат брони + **оркестратор Saga** | Доставка email |
+| 7 | **Payment** | PaymentIntent, confirm/capture/refund, idempotency, webhooks | Статус брони, выбор номера |
+| 8 | **Notification** | Шаблоны + email/SMS по событиям | Решение об отмене |
+
+Инфраструктура (не считаем отдельными «бизнес-сервисами»): Kafka, Redis, PostgreSQL per service, OpenSearch.
+
+Почему не god-service: Inventory и Payment изолированы — разные consistency-требования
+и разные внешние зависимости. Почему не дробим дальше: отдельный «Pricing» /
+«Cancellation Policy» пока внутри Catalog/Booking — иначе избыточное дробление.
+
