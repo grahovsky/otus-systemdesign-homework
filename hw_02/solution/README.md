@@ -59,4 +59,6 @@ _Где применяется и почему._
 
 ## 6. Паттерны
 
-_Saga, CQRS и т.д. — обоснование._
+| Паттерн | ADR / § |
+|---|---|
+| Saga (orchestration) | [ADR-0002](arc42/adr/0002-saga-orchestration.md) |
