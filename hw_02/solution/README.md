@@ -10,6 +10,10 @@
 Формат документации — LikeC4 (C1/C2) + arc42 §1/§4/§5/§9 + ADR.
 ER/PlantUML - для моделей данных (hw_03)
 
+| Раздел | Путь |
+|---|---|
+| arc42 | [`arc42/`](arc42/) |
+
 ---
 
 ## 1. Декомпозиция
@@ -31,7 +35,15 @@ ER/PlantUML - для моделей данных (hw_03)
 
 ## 2. Протоколы
 
-_REST / gRPC / GraphQL / events — где и почему._
+Микс с обоснованием: [§4.3](arc42/04-solution-strategy.md#42-протоколы-микс), [ADR-0001](arc42/adr/0001-protocol-mix.md).
+
+- **REST** — публичные команды (book/pay/cancel)
+- **GraphQL** — поиск под разные клиенты
+- **gRPC** — sync между сервисами (hold, authorize)
+- **Kafka** — факты, проекции Search, уведомления
+- **REST webhooks** — Payment Provider
+
+---
 
 ## 3. Схема взаимодействия
 

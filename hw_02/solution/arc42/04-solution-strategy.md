@@ -5,7 +5,8 @@
 ## 4.0 Общий подход
 
 Bookly — **микросервисная** система с чётким разделением write-path бронирования
-и read-path поиска.
+и read-path поиска. Между сервисами — **gRPC** для команд с ответом,
+**Kafka** для фактов и fan-out, **REST** (и GraphQL для поиска) на edge.
 
 ## 4.1 Декомпозиция (8 сервисов)
 
@@ -25,4 +26,19 @@ Bookly — **микросервисная** система с чётким ра�
 Почему не god-service: Inventory и Payment изолированы — разные consistency-требования
 и разные внешние зависимости. Почему не дробим дальше: отдельный «Pricing» /
 «Cancellation Policy» пока внутри Catalog/Booking — иначе избыточное дробление.
+
+## 4.2 Протоколы (микс)
+
+| Ребро | Протокол | Почему |
+|---|---|---|
+| Client → Gateway | **REST** | Публичный CRUD/команды, кэш GET, простота mobile/web |
+| Client → Gateway (поиск) | **GraphQL** | Гибкая проекция карточек под web/mobile без overfetch |
+| Gateway → сервисы | **gRPC** | Строгий контракт, low latency, codegen |
+| Booking → Inventory / Payment | **gRPC** | Sync-шаги Saga: нужен ответ hold/authorize здесь и сейчас |
+| Доменные факты | **Kafka** | Развязка, buffer пиков, fan-out Search/Notification, replay |
+| Payment Provider | **REST + webhooks** | Внешнее ограничение провайдера |
+| Availability push в UI (опц.) | **SSE** | Односторонние обновления «слот занят» на выдаче |
+
+Опора: [Таблица протоколов](../../Таблица%20протоколов.md) — нет «лучшего» протокола,
+есть подходящий под сценарий.
 
