@@ -1,0 +1,20 @@
+// systems-ext.c4 — внешние системы
+
+model {
+  payment_provider = system 'Payment Provider' {
+    #external
+    description 'ЮKassa / Stripe. Authorize / Capture / Refund.
+Callback через HTTPS webhook.'
+  }
+
+  msg_gateway = system 'Email / SMS Gateway' {
+    #external
+    description 'Доставка писем и SMS (подтверждение, напоминание, отмена).'
+  }
+
+  maps = system 'Maps / Geocoding API' {
+    #external
+    description 'Геокодинг адресов и карта для поиска по гео.
+Используется Search при индексации и UI-картах.'
+  }
+}

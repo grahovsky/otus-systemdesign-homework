@@ -1,0 +1,24 @@
+// views/c1-context.c4 — System Context
+
+views {
+  view bookly-c1 of bookly {
+    title 'Bookly — System Context (C1)'
+    description 'Сервис бронирования как чёрный ящик.
+Акторы: гость, партнёр, админ. Внешние: платежи, уведомления, карты.'
+
+    include bookly with {
+      navigateTo bookly-c2
+    }
+    include guest, partner, admin
+    include payment_provider, msg_gateway, maps
+
+    include guest -> bookly
+    include partner -> bookly
+    include admin -> bookly
+    include bookly -> payment_provider
+    include bookly -> msg_gateway
+    include bookly -> maps
+
+    autoLayout TopBottom
+  }
+}

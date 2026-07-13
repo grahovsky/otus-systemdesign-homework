@@ -1,7 +1,7 @@
 # ДЗ 2. Проектирование взаимодействия сервисов — решение
 
 > Условие: [../Задание.md](../Задание.md) · Таблица протоколов: [../Таблица протоколов.md](../Таблица%20протоколов.md)
-> Схемы складывайте в [diagrams/](diagrams/).
+> Схемы: [architecture/](architecture/) (LikeC4) · stub: [diagrams/](diagrams/)
 
 ## Выбранная система
 
@@ -12,6 +12,7 @@ ER/PlantUML - для моделей данных (hw_03)
 
 | Раздел | Путь |
 |---|---|
+| LikeC4 C1/C2 | [`architecture/`](architecture/) |
 | arc42 | [`arc42/`](arc42/) |
 
 ---
@@ -47,7 +48,10 @@ ER/PlantUML - для моделей данных (hw_03)
 
 ## 3. Схема взаимодействия
 
-_PNG/PlantUML с указанием протоколов (в diagrams/)._
+- C1: [`architecture/views/c1-context.c4`](architecture/views/c1-context.c4) (`bookly-c1`)
+- C2 (протоколы на рёбрах): [`architecture/views/c2-containers.c4`](architecture/views/c2-containers.c4) (`bookly-c2`)
+
+---
 
 ## 4. API-контракты
 
