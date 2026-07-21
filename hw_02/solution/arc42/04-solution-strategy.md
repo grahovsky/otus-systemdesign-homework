@@ -5,10 +5,9 @@
 ## 4.1 Общий подход
 
 Bookly — **микросервисная** система с чётким разделением write-path бронирования
-и read-path поиска. Между сервисами — **gRPC** для команд с ответом,
+и read-path поиска. Критический путь `hold → pay → confirm` оркестрируется
+**Booking Service** (Saga). Между сервисами — **gRPC** для команд с ответом,
 **Kafka** для фактов и fan-out, **REST** (и GraphQL для поиска) на edge.
-Критический путь `hold → pay → confirm` оркестрируется
-**Booking Service** (Saga).
 
 ## 4.2 Декомпозиция (8 сервисов)
 
@@ -71,3 +70,13 @@ Bookly — **микросервисная** система с чётким ра�
 read; choreography-only Saga без явного состояния; **двойной release**
 (и Booking gRPC, и Inventory по `booking.cancelled`) — release/confirm только от оркестратора,
 TTL — локальный sweeper Inventory.
+
+## 4.6 Ключевой поток (happy path)
+
+1. Гость ищет через GraphQL → Search (read-model; public, rate-limited).
+2. `POST /v1/bookings` → Booking: PENDING → gRPC **Hold** → gRPC **CreatePaymentIntent** → HELD.
+3. Гость `POST /v1/payments/{intent}/confirm` (3DS при необходимости).
+4. Provider webhook `payment.captured` → Payment публикует событие → Booking gRPC **Confirm** inventory → CONFIRMED.
+5. `booking.confirmed` → Notification; Search обновляет availability-проекцию.
+
+При fail/TTL: Booking **Release** (cancel/fail) либо Inventory sweeper → `inventory.released` → Booking EXPIRED.
