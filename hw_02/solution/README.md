@@ -66,7 +66,12 @@ ER/PlantUML - для моделей данных (hw_03)
 
 ## 5. Асинхронность
 
-_Где применяется и почему._
+Где и почему — [§4.4](arc42/04-solution-strategy.md#44-асинхронность--где-и-зачем).
+
+Кратко: sync на hold + CreateIntent (гость ждёт); async на Search-проекцию, email/SMS,
+TTL-expire (`inventory.released`) и webhook `payment.captured` → Confirm.
+
+---
 
 ## 6. Паттерны
 

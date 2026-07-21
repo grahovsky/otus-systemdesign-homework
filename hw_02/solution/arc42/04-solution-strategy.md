@@ -45,7 +45,16 @@ Bookly — **микросервисная** система с чётким ра�
 есть подходящий под сценарий.
 
 ## 4.3 Асинхронность — где и зачем
-TBD
+
+| Сценарий | Async? | Почему |
+|---|---|---|
+| Поиск | Sync (GraphQL/gRPC) | Гость ждёт выдачу в UI |
+| Soft-hold + CreateIntent | Sync gRPC | Без hold и intent нельзя вести на оплату |
+| Confirm/capture у провайдера | Sync edge + **async webhook** | UX инициирует confirm; финальный captured часто приходит webhook'ом |
+| Проекция Search | **Async Kafka** | Search eventual; не блокирует запись каталога/инвентаря |
+| Email/SMS | **Async Kafka** | Не на критическом пути; retry независимо |
+| Release по TTL | **Async** (Inventory sweeper → `inventory.released`) | Истечение hold не инициирует гость; Booking закрывает сагу в EXPIRED |
+| Компенсация после failed payment / cancel | Sync gRPC Release (+ Refund) от Booking | Оркестратор владеет компенсацией; Inventory не слушает `booking.*` |
 
 ## 4.4 Паттерны
 
