@@ -61,4 +61,13 @@ Bookly — **микросервисная** система с чётким ра�
 | Паттерн | Где | Зачем |
 |---|---|---|
 | **Saga (orchestration)** | Booking | Многошаговый book/pay/cancel с компенсацией |
+| **CQRS** | Search vs Catalog/Inventory | Разные нагрузки и модели чтения/записи |
+| **Soft lock / Hold + TTL** | Inventory | Снижение overbooking без долгой блокировки |
+| **Idempotency keys** | Booking create + Payment | Ретраи клиента/сети без двойного hold/списания |
+| **Transactional Outbox** | Booking (и др. writers) | Надёжная публикация в Kafka после commit |
+| **API Gateway** | Edge | Единый auth/rate-limit, скрытие внутренней топологии |
 
+Анти-паттерны, которых избегаем: distributed monolith через болтливый sync на каждый
+read; choreography-only Saga без явного состояния; **двойной release**
+(и Booking gRPC, и Inventory по `booking.cancelled`) — release/confirm только от оркестратора,
+TTL — локальный sweeper Inventory.

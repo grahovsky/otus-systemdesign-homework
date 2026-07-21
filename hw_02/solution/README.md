@@ -78,3 +78,7 @@ TTL-expire (`inventory.released`) и webhook `payment.captured` → Confirm.
 | Паттерн | ADR / § |
 |---|---|
 | Saga (orchestration) | [ADR-0002](arc42/adr/0002-saga-orchestration.md) |
+| Soft-hold + TTL | [ADR-0003](arc42/adr/0003-inventory-soft-hold.md) |
+| CQRS (Search) | [ADR-0004](arc42/adr/0004-cqrs-search.md) |
+| Idempotency keys | [ADR-0005](arc42/adr/0005-payment-idempotency.md) |
+| Outbox, API Gateway | [§4.5](arc42/04-solution-strategy.md#45-паттерны) |
