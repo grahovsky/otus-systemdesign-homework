@@ -14,6 +14,13 @@ ER/PlantUML - для моделей данных (hw_03)
 |---|---|
 | LikeC4 C1/C2 | [`architecture/`](architecture/) |
 | arc42 | [`arc42/`](arc42/) |
+| API-контракты | [`api/`](api/) |
+
+```bash
+cd hw_02/solution/architecture && npx --yes likec4@1 dev
+```
+
+
 
 ---
 
@@ -40,7 +47,7 @@ ER/PlantUML - для моделей данных (hw_03)
 
 - **REST** — публичные команды (book/pay/cancel)
 - **GraphQL** — поиск под разные клиенты
-- **gRPC** — sync между сервисами (hold, authorize)
+- **gRPC** — sync между сервисами (hold, authorize, шаги Saga)
 - **Kafka** — факты, проекции Search, уведомления
 - **REST webhooks** — Payment Provider
 
