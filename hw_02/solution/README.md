@@ -55,7 +55,14 @@ ER/PlantUML - для моделей данных (hw_03)
 
 ## 4. API-контракты
 
-_3–4 ключевых API (Swagger/OpenAPI или описание)._
+Ключевые API: [`api/`](api/)
+
+1. Search (GraphQL)
+2. Create Booking (REST)
+3. Payment + webhook (REST)
+4. Cancel Booking (REST)
+
+---
 
 ## 5. Асинхронность
 
