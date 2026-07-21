@@ -29,8 +29,6 @@
 | Payment | Деньги + webhooks |
 | Notification | Email/SMS consumer |
 
-C3 / env-views / ER на этапе ДЗ 2 не ведутся.
-
 ## Как посмотреть
 
 ```bash
