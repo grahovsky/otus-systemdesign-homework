@@ -32,7 +32,8 @@ Idempotency-Key: confirm:pay_01HZY...
 Либо `status: REQUIRES_ACTION` + `redirectUrl` для 3DS.
 
 Клиент **не** ждёт `CONFIRMED` в этом ответе: после returnUrl делает
-`GET /v1/bookings/{bookingId}` (или SSE/poll), пока статус не `CONFIRMED` / `CANCELLED` / `EXPIRED`.
+`GET /v1/bookings/{bookingId}` (poll), пока статус не `CONFIRMED` / `CANCELLED` / `EXPIRED`.
+(SSE для push — вне scope ДЗ, см. §4.3.)
 
 В быстрых sandbox-сценариях провайдер может сразу прислать captured — тогда
 следующий GET уже увидит `CONFIRMED`, но контракт confirm остаётся про **платёж**.

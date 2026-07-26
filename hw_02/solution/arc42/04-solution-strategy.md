@@ -38,7 +38,7 @@ Bookly — **микросервисная** система с чётким ра�
 | Booking → Inventory / Payment | **gRPC** | Sync-шаги Saga: нужен ответ hold/authorize здесь и сейчас |
 | Доменные факты | **Kafka** | Развязка, buffer пиков, fan-out Search/Notification, replay |
 | Payment Provider | **REST + webhooks** | Внешнее ограничение провайдера |
-| Availability push в UI (опц.) | **SSE** | Односторонние обновления «слот занят» на выдаче |
+| Availability push в UI (опц.) | **SSE** | Вне scope ДЗ: real-time «слот занят» на выдаче; в MVP — poll `GET /v1/bookings/{id}` |
 
 Опора: [Таблица протоколов](../../Таблица%20протоколов.md) — нет «лучшего» протокола,
 есть подходящий под сценарий.
@@ -62,7 +62,7 @@ Bookly — **микросервисная** система с чётким ра�
 | **Saga (orchestration)** | Booking | Многошаговый book/pay/cancel с компенсацией |
 | **CQRS** | Search vs Catalog/Inventory | Разные нагрузки и модели чтения/записи |
 | **Soft lock / Hold + TTL** | Inventory | Снижение overbooking без долгой блокировки |
-| **Idempotency keys** | Booking create + Payment | Ретраи клиента/сети без двойного hold/списания |
+| **Idempotency keys** | Booking create/cancel + Payment | Ретраи клиента/сети без двойного hold/списания/refund |
 | **Transactional Outbox** | Booking (и др. writers) | Надёжная публикация в Kafka после commit |
 | **API Gateway** | Edge | Единый auth/rate-limit, скрытие внутренней топологии |
 
