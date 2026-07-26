@@ -16,5 +16,5 @@
 | Header | Обязателен | Описание |
 |---|---|---|
 | `Authorization: Bearer <jwt>` | да (кроме search public) | JWT от Identity |
-| `Idempotency-Key` | для мутаций оплаты/создания брони | UUID |
+| `Idempotency-Key` | для мутаций оплаты / создания / отмены брони | UUID |
 | `X-Request-Id` | рекомендуется | корреляция логов |

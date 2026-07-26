@@ -47,9 +47,11 @@ Content-Type: application/json
 
 | HTTP | Code | Когда |
 |---|---|---|
-| 409 | `ALREADY_CANCELLED` | Повторная отмена (идемпотентный успех предпочтительнее) |
 | 422 | `CANCEL_NOT_ALLOWED` | Политика отмены (non-refundable после cutoff) |
 | 404 | `NOT_FOUND` | Нет брони / чужая бронь |
+
+Повтор с тем же `Idempotency-Key` → тот же `200` body (без второго release/refund).
+Уже `CANCELLED` без ключа / с другим ключом — тоже `200` с актуальным телом (идемпотентный успех).
 
 Политика non-refundable живёт в Booking (по `ratePlanId` из snapshot);
 Payment вызывается только если refund разрешён и был capture.
