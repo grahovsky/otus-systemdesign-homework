@@ -19,7 +19,9 @@ Saga: только Booking инициирует hold/confirm/release; Inventory 
     include bookly.kafka
     include bookly.redis
 
-    // хранилища — компактно
+    // PostgreSQL per service + OpenSearch
+    include bookly.db_identity
+    include bookly.db_catalog
     include bookly.db_booking
     include bookly.db_inventory
     include bookly.db_payment
@@ -49,10 +51,16 @@ Saga: только Booking инициирует hold/confirm/release; Inventory 
     include bookly.search -> bookly.kafka
     include bookly.notification -> bookly.kafka
 
+    include bookly.identity -> bookly.db_identity
+    include bookly.catalog -> bookly.db_catalog
     include bookly.booking -> bookly.db_booking
     include bookly.inventory -> bookly.db_inventory
     include bookly.payment -> bookly.db_payment
     include bookly.search -> bookly.search_index
+
+    include bookly.gateway -> bookly.redis
+    include bookly.search -> bookly.redis
+    include bookly.inventory -> bookly.redis
 
     include bookly.payment -> payment_provider
     include payment_provider -> bookly.gateway
