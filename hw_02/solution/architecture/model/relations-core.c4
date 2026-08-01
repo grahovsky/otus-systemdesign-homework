@@ -1,0 +1,66 @@
+// relations-core.c4 — связи с протоколами на рёбрах
+
+model {
+  // === Actors → Bookly ===
+  guest -> bookly.gateway 'search / book / pay / cancel' 'HTTPS REST (+ GraphQL search)'
+  partner -> bookly.gateway 'manage catalog & allotment' 'HTTPS REST'
+  admin -> bookly.gateway 'support & moderation' 'HTTPS REST'
+
+  // === Gateway → services (sync) ===
+  // login/refresh — proxy на Identity; на бизнес-запросах Gateway только validate JWT
+  bookly.gateway -[authenticates]-> bookly.identity 'login / refresh / validate JWT' 'gRPC'
+  bookly.gateway -[queries]-> bookly.search 'search & filters' 'gRPC'
+  bookly.gateway -[queries]-> bookly.catalog 'property details' 'gRPC'
+  bookly.gateway -[mutates]-> bookly.booking 'create / cancel / get booking' 'gRPC'
+  bookly.gateway -[queries]-> bookly.booking 'booking status' 'gRPC'
+  bookly.gateway -[mutates]-> bookly.payment 'confirm payment / forward webhook' 'gRPC'
+  bookly.gateway -[mutates]-> bookly.catalog 'partner CRUD (proxy)' 'gRPC'
+  bookly.gateway -[mutates]-> bookly.inventory 'partner allotment (proxy)' 'gRPC'
+
+  // === Saga sync calls (Booking — единственный оркестратор hold/confirm/release/refund) ===
+  bookly.booking -[mutates]-> bookly.inventory 'hold / confirm / release' 'gRPC'
+  bookly.booking -[mutates]-> bookly.payment 'createIntent / refund' 'gRPC'
+  bookly.booking -[queries]-> bookly.catalog 'snapshot price & room' 'gRPC'
+
+  // === Persistence ===
+  bookly.identity -[mutates]-> bookly.db_identity 'CRUD' 'SQL'
+  bookly.catalog -[mutates]-> bookly.db_catalog 'CRUD' 'SQL'
+  bookly.inventory -[mutates]-> bookly.db_inventory 'CRUD' 'SQL'
+  bookly.booking -[mutates]-> bookly.db_booking 'CRUD + outbox' 'SQL'
+  bookly.payment -[mutates]-> bookly.db_payment 'CRUD' 'SQL'
+  bookly.search -[queries]-> bookly.search_index 'query' 'HTTP'
+  bookly.search -[mutates]-> bookly.search_index 'index docs' 'HTTP'
+
+  bookly.gateway -> bookly.redis 'rate-limit / cache' 'RESP'
+  bookly.search -> bookly.redis 'hot query cache' 'RESP'
+  bookly.inventory -> bookly.redis 'hold TTL index' 'RESP'
+
+  // === Events (async) ===
+  bookly.catalog -[publishes]-> bookly.kafka 'catalog.updated' 'Kafka'
+  bookly.inventory -[publishes]-> bookly.kafka 'inventory.held|released|confirmed' 'Kafka'
+  bookly.booking -[publishes]-> bookly.kafka 'booking.*' 'Kafka'
+  bookly.payment -[publishes]-> bookly.kafka 'payment.*' 'Kafka'
+
+  bookly.search -[subscribes]-> bookly.kafka 'rebuild read-model' 'Kafka'
+  bookly.notification -[subscribes]-> bookly.kafka 'booking/payment events' 'Kafka'
+  // Booking слушает факты оплаты и TTL-release; сам решает следующий шаг саги
+  bookly.booking -[subscribes]-> bookly.kafka 'payment.captured|failed; inventory.released' 'Kafka'
+  // Inventory НЕ слушает booking.*: release/confirm только по gRPC от Booking
+  // (локальный TTL-sweeper внутри Inventory → publish inventory.released)
+
+  // === External ===
+  bookly.payment -> payment_provider 'authorize / capture / refund' 'HTTPS REST'
+  payment_provider -> bookly.gateway 'payment webhooks' 'HTTPS REST'
+  bookly.gateway -[mutates]-> bookly.payment 'forward webhook' 'gRPC'
+
+  bookly.notification -> msg_gateway 'send email/SMS' 'HTTPS REST'
+  bookly.search -> maps 'geocode / map tiles meta' 'HTTPS REST'
+
+  // C1-level shortcuts (чёрный ящик)
+  guest -> bookly 'uses' 'HTTPS'
+  partner -> bookly 'manages supply' 'HTTPS'
+  admin -> bookly 'operates' 'HTTPS'
+  bookly -> payment_provider 'charges / refunds' 'HTTPS'
+  bookly -> msg_gateway 'notifications' 'HTTPS'
+  bookly -> maps 'geo' 'HTTPS'
+}

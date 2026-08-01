@@ -1,0 +1,103 @@
+// booking/index.c4 — система Bookly и контейнеры (C2)
+
+model {
+  bookly = system 'Bookly' {
+    description 'Сервис бронирования объектов размещения (аналог Booking).
+Поиск → soft-hold инвентаря → оплата → подтверждение / компенсация (Saga).
+Ключевые сложности: overbooking, идемпотентность оплаты, отмены.'
+
+    gateway = container 'API Gateway' {
+      description 'Единая точка входа. TLS, auth (JWT), rate limit, маршрутизация.
+Публичный REST (+ GraphQL для поиска). Внутрь — gRPC.'
+    }
+
+    identity = container 'Identity Service' {
+      description 'Регистрация/логин, профили гостей и партнёров, роли.
+Выдаёт JWT для Gateway.'
+    }
+
+    catalog = container 'Catalog Service' {
+      description 'Объекты размещения, типы номеров, удобства, контент, тарифные планы.
+Source of truth для «что продаём». Write path партнёра.'
+    }
+
+    search = container 'Search Service' {
+      description 'CQRS read-model: геопоиск, фильтры, сортировка.
+Индексируется из событий Catalog + Inventory. Не пишет в inventory.'
+    }
+
+    inventory = container 'Inventory Service' {
+      description 'Календарь доступности, аллотмент, soft-hold (TTL), confirm/release.
+Единственный writer по слотам. TTL-sweeper сам снимает просроченный hold
+и публикует inventory.released; команды confirm/release — только от Booking (gRPC).'
+    }
+
+    booking = container 'Booking Service' {
+      description 'Агрегат бронирования + оркестратор Saga:
+create → hold → createIntent → (async captured) → confirm | compensate.
+Статусы: PENDING → HELD → CONFIRMED | CANCELLED | EXPIRED.
+Единственный инициатор hold/confirm/release/refund.'
+    }
+
+    payment = container 'Payment Service' {
+      description 'PaymentIntent + confirm/capture/refund через Payment Provider.
+Idempotency-Key на мутации. Webhooks → события payment.*.
+Не меняет статус брони напрямую — это делает Booking по событиям.'
+    }
+
+    notification = container 'Notification Service' {
+      description 'Шаблоны и доставка email/SMS/push по доменным событиям.
+Не знает бизнес-правил бронирования.'
+    }
+
+    kafka = container 'Kafka' {
+      #data
+      #async
+      description 'Шина событий: booking.*, inventory.*, payment.*, catalog.*.
+Развязка сервисов, fan-out уведомлений, проекция Search.'
+      style {
+        shape queue
+      }
+    }
+
+    redis = container 'Redis' {
+      #data
+      description 'Кеш hot-search, rate-limit counters, быстрый lookup soft-hold TTL.'
+      style {
+        shape storage
+      }
+    }
+
+    // БД показаны агрегировано на C2 (по одной на сервис в runtime)
+    db_identity = container 'db-identity (PostgreSQL)' {
+      #data
+      description 'Пользователи, credentials, роли.'
+      style { shape storage }
+    }
+    db_catalog = container 'db-catalog (PostgreSQL)' {
+      #data
+      description 'Properties, room types, amenities, rate plans.'
+      style { shape storage }
+    }
+    db_inventory = container 'db-inventory (PostgreSQL)' {
+      #data
+      description 'Availability calendar, holds, allotments.'
+      style { shape storage }
+    }
+    db_booking = container 'db-booking (PostgreSQL)' {
+      #data
+      description 'Bookings, saga state, outbox.'
+      style { shape storage }
+    }
+    db_payment = container 'db-payment (PostgreSQL)' {
+      #data
+      description 'Payment intents, idempotency keys, webhook log.'
+      style { shape storage }
+    }
+    search_index = container 'search-index (OpenSearch)' {
+      #data
+      description 'Денормализованный индекс для Search Service.'
+      style { shape storage }
+    }
+  }
+}
