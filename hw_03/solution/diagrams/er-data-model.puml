@@ -75,6 +75,9 @@ package "db-inventory (PostgreSQL)" as pkg_inv {
     * expires_at : timestamptz
   }
 
+  note right of slots
+    Shard key = property_id
+  end note
 }
 
 package "db-booking (PostgreSQL)" as pkg_bkg {
@@ -94,6 +97,11 @@ package "db-booking (PostgreSQL)" as pkg_bkg {
     * updated_at : timestamptz
   }
 
+  note right of bookings
+    Состояние Saga = status + saga_step.
+    booking_id несёт shard_id
+    (guest_id hash).
+  end note
 }
 
 package "db-payment (PostgreSQL)" as pkg_pay {
@@ -125,5 +133,16 @@ package "db-payment (PostgreSQL)" as pkg_pay {
   intents ||--o{ idem
 }
 
+note as n_no_db
+  Без своей БД:
+  Gateway — rate-limit в Redis
+  Notification — шаблоны в конфиге;
+  delivery-log опционален (не SoT)
+
+  Cross-service id (property_id,
+  booking_id, guest_id, hold_id …)
+  — logical refs, без физических FK
+  между БД сервисов.
+end note
 
 @enduml
