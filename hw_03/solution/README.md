@@ -24,6 +24,12 @@
 | Notification | — | шаблоны в конфиге; своей БД нет (delivery-log опционален, не SoT) |
 | Gateway | — | без БД; rate-limit counters в Redis |
 
+Инварианты:
+
+- **Available** = `allotment_total − allotment_sold − count(active holds)`. Soft-hold не дублируется в `slots`.
+- Outbox у **всех writers** (Catalog, Inventory, Booking, Payment) — публикация в Kafka после commit.
+- Search — CQRS read-model, **не** source of truth доступности ([ADR-0004](../../hw_02/solution/arc42/adr/0004-cqrs-search.md)).
+
 
 ## 2. Выбор БД
 

@@ -47,6 +47,16 @@ package "db-catalog (PostgreSQL)" as pkg_cat {
     cancellation_policy : jsonb
   }
 
+  entity "outbox" as outbox_cat {
+    * id : bigserial <<PK>>
+    --
+    aggregate_id : uuid
+    event_type : text
+    payload : jsonb
+    created_at : timestamptz
+    published_at : timestamptz
+  }
+
   properties ||--o{ room_types
   room_types ||--o{ rate_plans
 }
@@ -61,6 +71,7 @@ package "db-inventory (PostgreSQL)" as pkg_inv {
     * allotment_sold : int
     ==
     PK (property_id, room_type_id, date)
+    available = total - sold - count(active holds)
   }
 
   entity "holds" as holds {
@@ -75,7 +86,20 @@ package "db-inventory (PostgreSQL)" as pkg_inv {
     * expires_at : timestamptz
   }
 
+  entity "outbox" as outbox_inv {
+    * id : bigserial <<PK>>
+    --
+    aggregate_id : uuid
+    event_type : text
+    payload : jsonb
+    created_at : timestamptz
+    published_at : timestamptz
+  }
+
   note right of slots
+    Soft-hold не пишется в slots:
+    active holds считаются
+    из таблицы holds.
     Shard key = property_id
   end note
 }
@@ -95,6 +119,16 @@ package "db-booking (PostgreSQL)" as pkg_bkg {
     payment_intent_id : uuid
     saga_step : text
     * updated_at : timestamptz
+  }
+
+  entity "outbox" as outbox_bkg {
+    * id : bigserial <<PK>>
+    --
+    aggregate_id : uuid
+    event_type : text
+    payload : jsonb
+    created_at : timestamptz
+    published_at : timestamptz
   }
 
   note right of bookings
@@ -130,7 +164,37 @@ package "db-payment (PostgreSQL)" as pkg_pay {
     * processed_at : timestamptz
   }
 
+  entity "outbox" as outbox_pay {
+    * id : bigserial <<PK>>
+    --
+    aggregate_id : uuid
+    event_type : text
+    payload : jsonb
+    created_at : timestamptz
+    published_at : timestamptz
+  }
+
   intents ||--o{ idem
+}
+
+package "search-index (OpenSearch)" as pkg_search {
+  entity "property_doc" as prop_doc {
+    * propertyId
+    --
+    name, stars
+    geo {lat, lon}
+    amenities[]
+    roomTypes[]
+    minPrice {amount, currency}
+    availabilityHints[]
+  }
+
+  note bottom of prop_doc
+    CQRS read-model (ADR-0004).
+    Не SoT доступности.
+    Проекция из Kafka:
+    catalog.* + inventory.* + booking.*
+  end note
 }
 
 note as n_no_db
