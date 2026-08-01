@@ -1,0 +1,129 @@
+@startuml er-data-model
+title Bookly — модель данных по сервисам (SoT)
+
+skinparam linetype ortho
+skinparam packageStyle rectangle
+left to right direction
+
+package "db-identity (PostgreSQL)" as pkg_id {
+  entity "users" as users {
+    * id : uuid <<PK>>
+    --
+    email : text <<UQ>>
+    password_hash : text
+    role : enum guest|partner|admin
+    created_at : timestamptz
+  }
+}
+
+package "db-catalog (PostgreSQL)" as pkg_cat {
+  entity "properties" as properties {
+    * id : uuid <<PK>>
+    --
+    * partner_id : uuid
+    * name : text
+    stars : smallint
+    * lat : float
+    * lon : float
+    amenities : text[]
+    thumbnail_url : text
+  }
+
+  entity "room_types" as room_types {
+    * id : uuid <<PK>>
+    --
+    * property_id : uuid <<FK>>
+    name : text
+    capacity : int
+  }
+
+  entity "rate_plans" as rate_plans {
+    * id : uuid <<PK>>
+    --
+    * room_type_id : uuid <<FK>>
+    name : text
+    currency : char(3)
+    base_price : numeric
+    cancellation_policy : jsonb
+  }
+
+  properties ||--o{ room_types
+  room_types ||--o{ rate_plans
+}
+
+package "db-inventory (PostgreSQL)" as pkg_inv {
+  entity "availability_slots" as slots {
+    * property_id : uuid <<PK>>
+    * room_type_id : uuid <<PK>>
+    * date : date <<PK>>
+    --
+    * allotment_total : int
+    * allotment_sold : int
+    ==
+    PK (property_id, room_type_id, date)
+  }
+
+  entity "holds" as holds {
+    * hold_id : uuid <<PK>>
+    --
+    * property_id : uuid
+    * room_type_id : uuid
+    * date_from : date
+    * date_to : date
+    * booking_id : uuid
+    * status : enum ACTIVE|CONFIRMED|RELEASED|EXPIRED
+    * expires_at : timestamptz
+  }
+
+}
+
+package "db-booking (PostgreSQL)" as pkg_bkg {
+  entity "bookings" as bookings {
+    * id : uuid <<PK>>
+    --
+    * guest_id : uuid
+    * property_id : uuid
+    * room_type_id : uuid
+    * check_in : date
+    * check_out : date
+    * status : enum PENDING|HELD|CONFIRMED|CANCELLED|EXPIRED
+    * price_snapshot : jsonb
+    hold_id : uuid
+    payment_intent_id : uuid
+    saga_step : text
+    * updated_at : timestamptz
+  }
+
+}
+
+package "db-payment (PostgreSQL)" as pkg_pay {
+  entity "payment_intents" as intents {
+    * id : uuid <<PK>>
+    --
+    * booking_id : uuid
+    * amount : numeric
+    * currency : char(3)
+    * status : enum REQUIRES_CONFIRMATION|CAPTURED|FAILED|REFUNDED
+    provider_ref : text
+  }
+
+  entity "idempotency_keys" as idem {
+    * key : text <<PK>>
+    --
+    * intent_id : uuid
+    * response_snapshot : jsonb
+    * created_at : timestamptz
+  }
+
+  entity "webhook_log" as webhooks {
+    * provider_event_id : text <<PK>>
+    --
+    * payload : jsonb
+    * processed_at : timestamptz
+  }
+
+  intents ||--o{ idem
+}
+
+
+@enduml

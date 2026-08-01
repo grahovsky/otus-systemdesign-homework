@@ -5,11 +5,25 @@
 > [кэширование](../Чек-лист%20стратегий%20кэширования.md) ·
 > [шардирование](../Шаблон%20схемы%20шардирования.md). Схемы — в [diagrams/](diagrams/).
 
-> Выполняется для системы, выбранной в ДЗ 2.
+> Система: **Bookly** (сервис бронирования) — продолжение [ДЗ 2](../../hw_02/solution/).
+
+---
 
 ## 1. Модель данных
 
-_Какие данные хранит каждый сервис (ER-диаграмма или описание)._
+Схема: [`diagrams/er-data-model.puml`](diagrams/er-data-model.puml).
+
+| Сервис | Хранилище | Что хранит |
+|---|---|---|
+| Identity | PostgreSQL | `users` (email, hash, role) |
+| Catalog | PostgreSQL | `properties`, `room_types`, `rate_plans` + **outbox** → `catalog.updated` |
+| Inventory | PostgreSQL | `availability_slots`, `holds` + **outbox** → `inventory.*` |
+| Booking | PostgreSQL | `bookings` (статус саги + snapshot цены) + **outbox** → `booking.*` |
+| Payment | PostgreSQL | `payment_intents`, `idempotency_keys`, `webhook_log` + **outbox** → `payment.*` |
+| Search | OpenSearch | денормализованный `property_doc` (гео, фильтры, minPrice, availabilityHints) |
+| Notification | — | шаблоны в конфиге; своей БД нет (delivery-log опционален, не SoT) |
+| Gateway | — | без БД; rate-limit counters в Redis |
+
 
 ## 2. Выбор БД
 
