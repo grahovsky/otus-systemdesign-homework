@@ -129,6 +129,9 @@ Cross-shard write-path Inventory: **нет** (все операции hold в р
 
 ## 5. Очереди
 
+Схема: [`diagrams/queues-kafka.puml`](diagrams/queues-kafka.puml).
+Контекст C2 (Kafka на рёбрах) — [hw_02 LikeC4 `bookly-c2`](../../hw_02/solution/architecture/views/c2-containers.c4).
+
 **Брокер: Kafka** (уже зафиксирован в ДЗ 2).
 
 | Зачем Kafka, а не RabbitMQ/SQS | Деталь |
@@ -146,6 +149,10 @@ Cross-shard write-path Inventory: **нет** (все операции hold в р
 | `inventory.held\|released\|confirmed` | Inventory (outbox) | Search; Booking слушает `released` |
 | `booking.*` | Booking (outbox) | Search, Notification |
 | `payment.*` | Payment (outbox) | Booking (`captured`/`failed`), Notification |
+| `<topic>.<cg>.retry` | consumer при transient fail | **тот же** consumer group (backoff, N попыток) |
+| `<topic>.<cg>.dlt` | consumer после исчерпания retry / poison | ops/alert; ручной replay или фикс + republish |
+
+**Retry / DLT** — **отдельно на каждый consumer group** (не общие топики на всю систему): main → fail → `.retry` (N + backoff) → fail → `.dlt` + алерт. Иначе fail Search попал бы в retry Notification. Main не блокируется poison-message; consumer идемпотентен (дедуп по event id).
 
 **Не через Kafka:** истечение soft-hold. У Kafka нет нормальной delay-семантики под TTL 15 мин → Inventory **sweeper** по `holds.expires_at` (+ опционально Redis EXPIRE как hint).
 
