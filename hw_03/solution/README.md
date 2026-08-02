@@ -57,6 +57,8 @@
 
 ## 3. Шардирование
 
+Схемы: [`sharding-inventory.puml`](diagrams/sharding-inventory.puml), [`sharding-booking.puml`](diagrams/sharding-booking.puml).
+
 ### Шаг 0. Нужно ли?
 
 Предварительная оценка:
