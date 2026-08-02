@@ -129,7 +129,29 @@ Cross-shard write-path Inventory: **нет** (все операции hold в р
 
 ## 5. Очереди
 
-_Где брокер сообщений, какой и почему._
+**Брокер: Kafka** (уже зафиксирован в ДЗ 2).
+
+| Зачем Kafka, а не RabbitMQ/SQS | Деталь |
+|---|---|
+| Replay | пересборка Search-индекса при баге consumer |
+| Retention | хранить факты дольше ack consumer'а |
+| Multi consumer groups | Search + Notification (+ будущая аналитика) на одних топиках |
+| Порядок | partition key = aggregate id (`property_id` / `booking_id` / `payment_id`) |
+
+Топики (события):
+
+| Топик / семейство | Producer | Consumers |
+|---|---|---|
+| `catalog.updated` | Catalog (outbox) | Search |
+| `inventory.held\|released\|confirmed` | Inventory (outbox) | Search; Booking слушает `released` |
+| `booking.*` | Booking (outbox) | Search, Notification |
+| `payment.*` | Payment (outbox) | Booking (`captured`/`failed`), Notification |
+
+**Не через Kafka:** истечение soft-hold. У Kafka нет нормальной delay-семантики под TTL 15 мин → Inventory **sweeper** по `holds.expires_at` (+ опционально Redis EXPIRE как hint).
+
+Outbox у всех writers — at-least-once в Kafka; идемпотентность на consumer / дедуп по event id.
+
+---
 
 ## 6. CAP trade-offs
 
