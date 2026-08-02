@@ -102,6 +102,8 @@ Cross-shard write-path Inventory: **нет** (все операции hold в р
 
 ## 4. Кэширование
 
+Схема: [`diagrams/caching-flow.puml`](diagrams/caching-flow.puml).
+
 | Что кэшируем | Уровень | Стратегия | TTL | Инвалидация | Зачем |
 |---|---|---|---|---|---|
 | Search-выдача (hot query) | Redis (app) | cache-aside | ~60 с | только TTL | снять повторные одинаковые гео-запросы с OpenSearch |

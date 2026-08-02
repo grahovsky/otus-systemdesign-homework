@@ -1,66 +1,67 @@
 @startuml caching-flow
-title Кэширование: cache-aside Search/Catalog + invalidate по Kafka
+title Кэширование: cache-aside + invalidate
 
 skinparam sequenceMessageAlign center
 
 actor Guest
 participant "API Gateway" as GW
-participant "Search\nService" as Search
+participant "Search" as Search
+participant "Catalog" as Catalog
+participant "Booking" as Booking
 participant "Redis" as Redis
 participant "OpenSearch" as OS
-participant "Catalog\nService" as Catalog
 participant "Kafka" as Kafka
 database "db-catalog" as DB
+database "db-booking" as DBB
 
-== Cache-aside: поиск (hot query) ==
+== Search (hot query) — invalidate только TTL ==
 
 Guest -> GW : GraphQL search
-GW -> Search : gRPC Query
-Search -> Redis : GET search:{hash(params)}
-
-alt cache HIT
-  Redis --> Search : cached page
-  Search --> GW : results (TTL ≤ 60s)
-else cache MISS
-  Redis --> Search : miss
-  Search -> OS : query geo/filters
-  OS --> Search : hits
-  Search -> Redis : SETEX key 60 payload\n(+ stampede lock)
-  Search --> GW : results
+GW -> Search : Query
+Search -> Redis : GET search:{hash}
+opt miss
+  Search -> OS : geo/filters
+  Search -> Redis : SETEX 60s (+ stampede lock)
 end
+Search --> GW : results
 
-note over Search, Redis
-  Инвалидация только по TTL:
-  слишком много комбинаций фильтров
-  для event-based сброса.
+note right of Redis
+  Event-DEL непрактичен:
+  слишком много комбинаций фильтров.
 end note
 
-== Cache-aside: карточка объекта + invalidate ==
+== Catalog card — DEL по catalog.updated ==
 
 Guest -> GW : GET property
-GW -> Catalog : gRPC Get
+GW -> Catalog : Get
 Catalog -> Redis : GET catalog:prop:{id}
-
-alt cache HIT
-  Redis --> Catalog : card
-else cache MISS
+opt miss
   Catalog -> DB : SELECT
-  DB --> Catalog : row
-  Catalog -> Redis : SETEX ... 600
+  Catalog -> Redis : SETEX 10min
 end
 Catalog --> GW : card
 
-... partner обновляет объект ...
-
 Catalog -> DB : UPDATE + outbox
 Catalog -> Kafka : catalog.updated
-Kafka -> Catalog : (или отдельный consumer)
 Catalog -> Redis : DEL catalog:prop:{id}
 
-note over Catalog, Redis
+== Booking status (polling) — DEL по booking.* ==
+
+Guest -> GW : GET booking
+GW -> Booking : GetStatus
+Booking -> Redis : GET booking:status:{id}
+opt miss
+  Booking -> DBB : SELECT
+  Booking -> Redis : SETEX 2–3s
+end
+Booking --> GW : status
+
+Booking -> Kafka : booking.* (outbox)
+Booking -> Redis : DEL booking:status:{id}
+
+note over Catalog, Booking
   Hold / available count **не** кэшируем
-  как permission на hold:
-  SoT = Inventory Postgres (ADR-0003).
+  как permission на hold (SoT = Inventory Postgres).
 end note
 
 @enduml
