@@ -46,11 +46,12 @@
 
 5× PostgreSQL — не «по умолчанию»: у каждого своя причина ACID/связей. Разные семейства — OpenSearch (поиск) и Redis (кэш/TTL).
 
-Инварианты выбора (что **не** ставим вместо Postgres на SoT):
+Инварианты выбора (что **не** ставим вместо Postgres на SoT сейчас):
 
 - **MongoDB / документные** не заменяют Inventory / Booking / Payment / Identity: нужен multi-row ACID (hold на диапазон дат, saga+outbox, идемпотентность+аудит). Для Catalog документ «property целиком» выглядит заманчиво, но частичные апдейты тарифов/room types + транзакции проще в Postgres (+ JSONB на policy) — Mongo не даёт выигрыша, только операционную сложность ещё одной СУБД.
 - **ClickHouse / колоночные** — не OLTP: точечные `UPDATE` hold/confirm, низкая латентность записи и строгие инварианты — антипаттерн. ClickHouse уместен **позже** как OLAP-sink (ETL из Kafka: occupancy, воронка брони, отчёты партнёру), **не** как primary store сервисов.
-- Итого: альтернативы семейств уже заняты задачей (OpenSearch = поиск, Redis = кэш/TTL); колоночные/документные на write-path SoT не подмешиваем.
+- **NewSQL** (CockroachDB, Spanner, Yugabyte; VoltDB — узкий in-memory) теоретически снимает ручное шардирование Inventory/Booking: SQL + распределённый ACID. На старте **не берём**: выше write-latency (consensus/Paxos/Raft), ops/стоимость, другая семантика транзакций и миграционный риск. Ручной shard key в Postgres — осознанный контроль locality hold’ов. NewSQL — эскалация, когда app-level sharding станет дороже эксплуатации, чем смена СУБД (и только для сервисов с горизонтальным write-path, не «везде»).
+- Итого: альтернативы семейств уже заняты задачей (OpenSearch = поиск, Redis = кэш/TTL); документные/колоночные/NewSQL на write-path SoT сейчас не используем.
 
 ---
 
