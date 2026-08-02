@@ -1,0 +1,66 @@
+@startuml caching-flow
+title Кэширование: cache-aside Search/Catalog + invalidate по Kafka
+
+skinparam sequenceMessageAlign center
+
+actor Guest
+participant "API Gateway" as GW
+participant "Search\nService" as Search
+participant "Redis" as Redis
+participant "OpenSearch" as OS
+participant "Catalog\nService" as Catalog
+participant "Kafka" as Kafka
+database "db-catalog" as DB
+
+== Cache-aside: поиск (hot query) ==
+
+Guest -> GW : GraphQL search
+GW -> Search : gRPC Query
+Search -> Redis : GET search:{hash(params)}
+
+alt cache HIT
+  Redis --> Search : cached page
+  Search --> GW : results (TTL ≤ 60s)
+else cache MISS
+  Redis --> Search : miss
+  Search -> OS : query geo/filters
+  OS --> Search : hits
+  Search -> Redis : SETEX key 60 payload\n(+ stampede lock)
+  Search --> GW : results
+end
+
+note over Search, Redis
+  Инвалидация только по TTL:
+  слишком много комбинаций фильтров
+  для event-based сброса.
+end note
+
+== Cache-aside: карточка объекта + invalidate ==
+
+Guest -> GW : GET property
+GW -> Catalog : gRPC Get
+Catalog -> Redis : GET catalog:prop:{id}
+
+alt cache HIT
+  Redis --> Catalog : card
+else cache MISS
+  Catalog -> DB : SELECT
+  DB --> Catalog : row
+  Catalog -> Redis : SETEX ... 600
+end
+Catalog --> GW : card
+
+... partner обновляет объект ...
+
+Catalog -> DB : UPDATE + outbox
+Catalog -> Kafka : catalog.updated
+Kafka -> Catalog : (или отдельный consumer)
+Catalog -> Redis : DEL catalog:prop:{id}
+
+note over Catalog, Redis
+  Hold / available count **не** кэшируем
+  как permission на hold:
+  SoT = Inventory Postgres (ADR-0003).
+end note
+
+@enduml
