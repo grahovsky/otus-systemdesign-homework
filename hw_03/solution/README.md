@@ -102,7 +102,28 @@ Cross-shard write-path Inventory: **нет** (все операции hold в р
 
 ## 4. Кэширование
 
-_Что кэшируем, стратегия, TTL._
+| Что кэшируем | Уровень | Стратегия | TTL | Инвалидация | Зачем |
+|---|---|---|---|---|---|
+| Search-выдача (hot query) | Redis (app) | cache-aside | ~60 с | только TTL | снять повторные одинаковые гео-запросы с OpenSearch |
+| Карточка property | Redis (app) | cache-aside | 10 мин | `DEL` по `catalog.updated` | редкие write, частые GET деталей |
+| Booking status (polling) | Redis (app) | cache-aside | 2–3 с | `DEL` по `booking.*` | гасить polling storm после оплаты |
+| Hold TTL index | Redis | hint + EXPIRE | = hold TTL (15 мин) | expire / delete при confirm/release | ускорить sweeper lookup; **SoT = Postgres** |
+| thumbnail / медиа | CDN (edge) | CDN cache | дни + versioned URL | смена URL при замене файла | offload origin |
+| JWKS / публичные ключи | Gateway | cache-aside | до ротации | по kid / TTL | не ходить в Identity на каждый запрос |
+
+**Явно не кэшируем:**
+
+- Payment intents / статусы платежей — нужна свежесть и аудит.
+- `available count` как **permission** на hold — финальный Hold всегда в Inventory/Postgres (защита от double-sell / ложного sold-out из stale cache). Optimistic hint в MVP не делаем, чтобы не путать с Search CQRS.
+
+Проблемы:
+
+- **Stampede** на hot search — lock / probabilistic early expiration при SET.
+- **Cold start** — lazy fill, без обязательного прогрева.
+- **Eviction** — LRU в Redis; ключи поиска ограничены по cardinality (hash params + TTL).
+- Redis keyspace notifications **не** единственный механизм истечения hold (ненадёжны при failover) — Inventory sweeper по Postgres обязателен ([ADR-0003](../../hw_02/solution/arc42/adr/0003-inventory-soft-hold.md)).
+
+---
 
 ## 5. Очереди
 
