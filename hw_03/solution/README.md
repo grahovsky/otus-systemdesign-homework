@@ -53,6 +53,14 @@
 - **NewSQL** (CockroachDB, Spanner, Yugabyte; VoltDB — узкий in-memory) теоретически снимает ручное шардирование Inventory/Booking: SQL + распределённый ACID. На старте **не берём**: выше write-latency (consensus/Paxos/Raft), ops/стоимость, другая семантика транзакций и миграционный риск. Ручной shard key в Postgres — осознанный контроль locality hold’ов. NewSQL — эскалация, когда app-level sharding станет дороже эксплуатации, чем смена СУБД (и только для сервисов с горизонтальным write-path, не «везде»).
 - Итого: альтернативы семейств уже заняты задачей (OpenSearch = поиск, Redis = кэш/TTL); документные/колоночные/NewSQL на write-path SoT сейчас не используем.
 
+Самопроверка ([критерии выбора БД](../Таблица%20сравнения%20БД%20с%20критериями%20выбора.md)):
+
+- [x] Не выбрал одну БД «по умолчанию» для всех сервисов без разбора — 5× Postgres с разными причинами + OpenSearch + Redis; явно «не по умолчанию»
+- [x] Не взял экзотическую БД ради «модности» — OpenSearch/Redis под паттерн запросов; Mongo/ClickHouse/NewSQL отвергнуты с причиной
+- [x] Учёл операционную стоимость — отказ от Mongo/NewSQL из‑за ещё одной СУБД / ops; Redis не primary
+- [x] Выбор согласован с типом запросов — колонка «Ключевые запросы»; гео→OpenSearch, ACID hold→Postgres, GET/SET→Redis
+- [x] Где выбран NoSQL — явно чем пожертвовал — OpenSearch: JOIN/ACID → eventual; Redis: не SoT
+
 ---
 
 ## 3. Шардирование
@@ -98,6 +106,22 @@
 Cross-shard write-path Inventory: **нет** (все операции hold в рамках одного property).
 Аналитика / OLAP — вне scope (ETL в колоночное хранилище).
 
+Ребалансировка: consistent hashing + vnodes → при add node переезжает ~1/N ключей; миграция **online** (dual-read со старого/нового шарда, затем cutover), без глобального даунтайма записи.
+
+Вторичные индексы: **локальные на шард** (slots/holds по `property_id` уже на своём шарде). Глобальный directory «booking_id → shard» не нужен — `shard_id` встроен в `booking_id`. Запрос «брони property X» — scatter-gather или отдельный read-model, не глобальный secondary index в write-path.
+
+Самопроверка ([шаблон шардирования](../Шаблон%20схемы%20шардирования.md)):
+
+- [x] Шаг 0: оценка объёма/RPS; вертикаль+реплики скоро упрутся; Identity/Catalog/Payment явно не шардируем
+- [x] Шаг 1: таблица кандидатов (равномерность / локальность / hotspot) для Inventory и Booking
+- [x] Шаг 2: стратегия — consistent hashing + vnodes (не plain `% N`)
+- [x] Шаг 3: add node → ~1/N ключей; online dual-read/cutover без простоя всего кластера
+- [x] Hotspots — соль/pin (Inventory), отдельный шард OTA (Booking)
+- [x] Cross-shard — write Inventory нет; «брони property X» → scatter-gather / read-model
+- [x] Распределённые транзакции — связанное в одном шарде (hold по property); межсервисно Saga, не cross-shard 2PC
+- [x] Вторичные индексы — локальные на шард; lookup booking без directory (shard_id в id)
+- [x] Итоговая таблица + схемы
+
 ---
 
 ## 4. Кэширование
@@ -124,6 +148,17 @@ Cross-shard write-path Inventory: **нет** (все операции hold в р
 - **Cold start** — lazy fill, без обязательного прогрева.
 - **Eviction** — LRU в Redis; ключи поиска ограничены по cardinality (hash params + TTL).
 - Redis keyspace notifications **не** единственный механизм истечения hold (ненадёжны при failover) — Inventory sweeper по Postgres обязателен ([ADR-0003](../../hw_02/solution/arc42/adr/0003-inventory-soft-hold.md)).
+
+Самопроверка ([чек-лист кэширования](../Чек-лист%20стратегий%20кэширования.md), шаги 3–4):
+
+- [x] TTL на каждый кэш + обоснование свежести — колонка TTL/Зачем (60с search, 10 мин card, 2–3с status, 15 мин hold, CDN/JWKS)
+- [x] Способ инвалидации — колонка: TTL / `DEL` по событию / expire+delete / versioned URL / kid
+- [x] Stale: допустимы на TTL у search/card/status; **недопустимы** для payment и available-as-permission → не кэшируем
+- [x] Ключ кэша — узкий `prop:{id}` / `booking:status:{id}`; search = hash(params), cardinality режется TTL (event-DEL непрактичен)
+- [x] Stampede — lock / probabilistic early expiration на hot search
+- [x] Cold start — lazy fill, без обязательного прогрева
+- [x] Консистентность кэш↔источник — расхождение на TTL ок; SoT hold = Postgres (не Redis notifications)
+- [x] Вытеснение — LRU + TTL; лимит cardinality ключей поиска
 
 ---
 
