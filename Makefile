@@ -19,8 +19,9 @@ $(PLANTUML_JAR):
 	@echo "Downloading latest PlantUML..."
 	curl -fsSL -o '$@' '$(PLANTUML_URL)'
 
-%.svg: %.puml $(PLANTUML_JAR) plantuml.config
-	$(JAVA) -Dfile.encoding=UTF-8 -jar $(PLANTUML_JAR) -charset UTF-8 -config plantuml.config -tsvg '$<'
+%.svg: %.puml $(PLANTUML_JAR)
+	$(JAVA) -Dfile.encoding=UTF-8 -jar $(PLANTUML_JAR) -charset UTF-8 \
+	  -SdefaultFontName="Segoe UI" -SdefaultFontSize=12 -tsvg '$<'
 
 clean:
 	@$(if $(SVG_FILES),rm -f $(SVG_FILES),true)

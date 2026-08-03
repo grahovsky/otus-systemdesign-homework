@@ -1,0 +1,49 @@
+@startuml sharding-booking
+title Booking — шардирование по guest_id + shard_id в booking_id
+
+left to right direction
+skinparam defaultFontSize 12
+
+actor "Gateway\n(create / my bookings)" as gw
+actor "Kafka consumer\npayment.captured\ninventory.released" as kafka
+
+rectangle "Booking Service" as bkg {
+  component "Create path\nshard = hash(guest_id)\nbooking_id = ULID + shard_id" as create
+  component "Lookup by booking_id\nextract shard_id → route" as lookup
+}
+
+database "Shard 0\nPostgreSQL" as s0
+database "Shard 1\nPostgreSQL" as s1
+database "Shard N-1\nPostgreSQL" as sn
+
+gw --> create : POST /bookings\n(guest from JWT)
+create --> s0
+create --> s1
+create --> sn
+
+kafka --> lookup : booking_id in event
+lookup --> s0
+lookup --> s1
+lookup --> sn
+
+note bottom of create
+  **Почему guest_id**
+  Основной read: «мои брони» —
+  один шард, без scatter-gather.
+
+  **Lookup без directory**
+  Payment/Inventory шлют booking_id;
+  shard_id зашит в id → O(1) route.
+end note
+
+note right of sn
+  Trade-off: «все брони property X»
+  (support / partner) →
+  scatter-gather или
+  отдельный read-model позже.
+
+  Hotspot B2B/OTA-аккаунт:
+  отдельный шард / дробный ключ.
+end note
+
+@enduml

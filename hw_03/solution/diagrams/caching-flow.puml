@@ -1,0 +1,67 @@
+@startuml caching-flow
+title Кэширование: cache-aside + invalidate
+
+skinparam sequenceMessageAlign center
+
+actor Guest
+participant "API Gateway" as GW
+participant "Search" as Search
+participant "Catalog" as Catalog
+participant "Booking" as Booking
+participant "Redis" as Redis
+participant "OpenSearch" as OS
+participant "Kafka" as Kafka
+database "db-catalog" as DB
+database "db-booking" as DBB
+
+== Search (hot query) — invalidate только TTL ==
+
+Guest -> GW : GraphQL search
+GW -> Search : Query
+Search -> Redis : GET search:{hash}
+opt miss
+  Search -> OS : geo/filters
+  Search -> Redis : SETEX 60s (+ stampede lock)
+end
+Search --> GW : results
+
+note right of Redis
+  Event-DEL непрактичен:
+  слишком много комбинаций фильтров.
+end note
+
+== Catalog card — DEL по catalog.updated ==
+
+Guest -> GW : GET property
+GW -> Catalog : Get
+Catalog -> Redis : GET catalog:prop:{id}
+opt miss
+  Catalog -> DB : SELECT
+  Catalog -> Redis : SETEX 10min
+end
+Catalog --> GW : card
+
+Catalog -> DB : UPDATE + outbox
+Catalog -> Kafka : catalog.updated
+Catalog -> Redis : DEL catalog:prop:{id}
+
+== Booking status (polling) — DEL по booking.* ==
+
+Guest -> GW : GET booking
+GW -> Booking : GetStatus
+Booking -> Redis : GET booking:status:{id}
+opt miss
+  Booking -> DBB : SELECT
+  Booking -> Redis : SETEX 2–3s
+end
+Booking --> GW : status
+
+Booking -> Kafka : booking.* (outbox)
+Booking -> Redis : DEL booking:status:{id}
+
+note over Catalog, Booking
+  Hold / available count **не** кэшируем
+  как permission на hold (SoT = Inventory Postgres).
+end note
+
+@enduml

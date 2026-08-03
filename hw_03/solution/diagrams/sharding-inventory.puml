@@ -1,0 +1,48 @@
+@startuml sharding-inventory
+title Inventory — шардирование по property_id
+
+left to right direction
+skinparam defaultFontSize 12
+skinparam componentStyle rectangle
+
+actor "Booking\n(gRPC Hold/Confirm/Release)" as booking
+actor "Partner\n(allotment)" as partner
+
+rectangle "Inventory Service" as inv {
+  component "Shard Router\nhash(property_id)\nconsistent hashing + vnodes" as router
+}
+
+database "Shard 0\nPostgreSQL" as s0
+database "Shard 1\nPostgreSQL" as s1
+database "Shard N-1\nPostgreSQL\n(N=16 start)" as sn
+
+database "Redis\nhold TTL index\n(не SoT)" as redis
+
+booking --> router : Hold(property_id, ...)
+partner --> router : upsert allotment
+router --> s0 : property_id → shard 0
+router --> s1
+router --> sn
+
+s0 ..> redis : optional EXPIRE hint\n(sweeper читает Postgres)
+
+note bottom of router
+  **Почему property_id**
+  Hold/Confirm/Release всегда
+  в рамках одного property →
+  одна локальная транзакция,
+  нет cross-shard write.
+
+  Hotspot (популярный отель):
+  соль / pin на выделенный шард,
+  не смена ключа на room_type_id.
+end note
+
+note right of s0
+  Таблицы на шарде:
+  availability_slots, holds, outbox
+  PK/UK включают property_id
+  где нужно для локальности.
+end note
+
+@enduml

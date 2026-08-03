@@ -1,0 +1,70 @@
+@startuml queues-kafka
+title Bookly — Kafka: topics + retry / DLT
+
+left to right direction
+skinparam defaultFontSize 12
+skinparam componentStyle rectangle
+
+rectangle "Writers (outbox)" as writers {
+  component "Catalog" as cat
+  component "Inventory" as inv
+  component "Booking" as bkg
+  component "Payment" as pay
+}
+
+queue "Kafka — main" as kafka {
+  collections "catalog.updated\nkey=property_id" as t_cat
+  collections "inventory.held|released|confirmed\nkey=property_id" as t_inv
+  collections "booking.*\nkey=booking_id" as t_bkg
+  collections "payment.*\nkey=payment_id" as t_pay
+}
+
+rectangle "Consumer groups" as consumers {
+  component "Search" as search
+  component "Notification" as notif
+  component "Booking (saga)" as bkg_c
+}
+
+' Error-path показан на Search как образец (не общий топик на все CG)
+queue "Error path (пример: Search)" as err {
+  collections "… .search.retry\nbackoff / N" as t_retry
+  collections "… .search.dlt\npoison / exhausted" as t_dlt
+}
+
+cat --> t_cat
+inv --> t_inv
+bkg --> t_bkg
+pay --> t_pay
+
+t_cat --> search
+t_inv --> search
+t_inv --> bkg_c : released
+t_bkg --> search
+t_bkg --> notif
+t_pay --> bkg_c : captured|failed
+t_pay --> notif
+
+search -[#orange]-> t_retry : transient fail
+t_retry --> search : reprocess
+search -[#red]-> t_dlt : exhausted / poison
+
+note bottom of err
+  **Per consumer group**, не общий retry/DLT:
+  main → fail → <topic>.<cg>.retry (N, backoff)
+  → fail → <topic>.<cg>.dlt + alert.
+  То же у Notification и Booking (saga).
+  Main не блокируется poison-message;
+  consumer идемпотентен (дедуп event id).
+end note
+
+note right of inv
+  Soft-hold TTL **не** через Kafka:
+  Inventory sweeper по holds.expires_at
+end note
+
+note bottom of kafka
+  Почему Kafka: replay, retention,
+  multi CG, порядок по aggregate id.
+end note
+
+@enduml
