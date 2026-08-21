@@ -1,0 +1,62 @@
+@startuml rps-fanout
+title Bookly — fan-out: один экран ≠ один запрос
+
+skinparam sequenceMessageAlign center
+skinparam defaultFontSize 12
+
+actor Guest
+participant "API Gateway" as GW
+participant "Search" as Search
+participant "Catalog" as Catalog
+participant "Booking" as Booking
+participant "Inventory" as Inv
+participant "Payment" as Pay
+participant "Платёжный провайдер" as Prov
+participant "Redis / OpenSearch" as Idx
+participant "CDN" as CDN
+
+== Поиск (чтение): что делает DAU за день ==
+
+Guest -> GW : подсказки (×5 / DAU)
+GW -> Search : запрос по префиксу
+Search -> Idx : кэш или индекс
+
+Guest -> GW : поиск (×8 / DAU)
+GW -> Search : запрос
+Search -> Idx : гео и фильтры (кэш / OpenSearch)
+Search --> GW : 20 карточек, JSON
+Guest -> CDN : 20 превью (это не RPS API)
+
+Guest -> GW : карточка объекта (×4 / DAU)
+GW -> Catalog : из кэша или БД
+Guest -> GW : календарь
+GW -> Search : доступность в выдаче
+Guest -> CDN : фото карточки (не RPS API)
+
+== Бронь (запись): создать → hold → оплата → подтвердить ==
+
+Guest -> GW : POST /v1/bookings
+GW -> Booking : создать
+Booking -> Inv : Hold
+Booking -> Pay : создать платёж
+Booking --> GW : бронь удерживается
+
+Guest -> GW : POST /payments/{id}/confirm
+GW -> Pay : подтвердить у провайдера
+
+Prov -> GW : уведомление: деньги списаны
+GW -> Pay : принять (повтор безопасен)
+Pay -> Booking : событие в Kafka
+Booking -> Inv : подтвердить слот
+
+loop опрос ×5
+  Guest -> GW : GET /v1/bookings/{id}
+  GW -> Booking : статус
+end
+
+note over Guest, CDN
+  CDN отдаёт байты, это не запросы API.
+  Пик сезона ×5 на все строки.
+end note
+
+@enduml

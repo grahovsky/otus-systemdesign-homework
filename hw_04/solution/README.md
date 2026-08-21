@@ -37,6 +37,8 @@ RPS_peak        = RPS_avg × 5
 
 Партнёрский write (аллотмент/тарифы) ~50k апдейтов/сутки ≈ 0.6 RPS — шум, дальше не тащим.
 
+Схема fan-out: [`diagrams/rps-fanout.puml`](diagrams/rps-fanout.puml).
+
 ---
 
 
