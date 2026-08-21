@@ -1,0 +1,33 @@
+@startuml egress-cdn
+title Bookly — куда уходят байты (месяц, среднее)
+
+left to right direction
+skinparam defaultFontSize 12
+skinparam componentStyle rectangle
+
+actor "Гость\n300K DAU" as guest
+
+rectangle "Вход" {
+  component "API Gateway\nJSON ~0.6 ТБ/мес\nпик ~20 Мбит/с" as gw
+  component "CDN\nфото ~100 ТБ/мес\nпик ~1.5 Гбит/с" as cdn
+}
+
+rectangle "Наши серверы" {
+  component "Search / Catalog / Booking" as api
+  database "Объектное хранилище\n~230 ГБ фото" as s3
+}
+
+guest --> gw : ответы API\n~$50/мес наружу
+guest --> cdn : превью и фото
+
+gw --> api : внутрь
+cdn --> s3 : нет в кэше ~10%\n~$800/мес
+cdn --> guest : из кэша ~90%\n~$2.7k/мес
+
+note bottom of cdn
+  **Почти все байты — картинки, не JSON.**
+  Загрузка в облако бесплатна.
+  Счёт за сеть ≈ CDN + то, чего не было в кэше.
+end note
+
+@enduml

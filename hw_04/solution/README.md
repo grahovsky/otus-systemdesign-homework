@@ -145,6 +145,7 @@ Redis           = ~1 ГБ в памяти                           ← не к�
 ## 3. Расчёт bandwidth
 
 Трафик **наружу** (egress). Загрузка в облако бесплатна.
+Схема: [`diagrams/egress-cdn.puml`](diagrams/egress-cdn.puml).
 
 ### За месяц (среднее, от данного DAU)
 
