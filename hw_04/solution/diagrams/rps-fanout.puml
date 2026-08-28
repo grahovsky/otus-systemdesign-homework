@@ -28,7 +28,9 @@ Search --> GW : 20 карточек, JSON
 Guest -> CDN : 20 превью (это не RPS API)
 
 Guest -> GW : карточка объекта (×4 / DAU)
-GW -> Catalog : из кэша или БД
+GW -> Catalog : Get
+Catalog -> Idx : кэш или БД
+
 Guest -> GW : календарь
 GW -> Search : доступность в выдаче
 Guest -> CDN : фото карточки (не RPS API)
@@ -52,11 +54,14 @@ Booking -> Inv : подтвердить слот
 loop опрос ×5
   Guest -> GW : GET /v1/bookings/{id}
   GW -> Booking : статус
+  Booking -> Idx : кэш статуса (TTL 2–3 с)
 end
 
 note over Guest, CDN
   CDN отдаёт байты, это не запросы API.
   Пик сезона ×5 на все строки.
+  Кэш — cache-aside в сервисе, не в Gateway:
+  вход Catalog = все карточки, не только miss в БД.
 end note
 
 @enduml
