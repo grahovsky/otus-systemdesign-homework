@@ -1,0 +1,63 @@
+@startuml replication-ha
+title Bookly — репликация Tier 0 БД (Booking / Inventory / Payment)
+
+left to right direction
+skinparam defaultFontSize 12
+skinparam componentStyle rectangle
+
+actor "Сервис\n(Booking / Inventory / Payment)" as app
+
+rectangle "Routing plane" as routing {
+  component "Proxy-слой\n(писать → primary,\nчитать → реплики)\nрезервирован сам (пара + VIP)" as proxy
+}
+
+rectangle "Control plane\nDCS-кворум (etcd/Consul)" as control {
+  component "Оркестратор\n(Patroni-подобный)\nhealth-check + leader election\n+ fencing" as orchestrator
+}
+
+rectangle "Регион A — зона 1 (AZ1)" as az1 {
+  database "PostgreSQL\nprimary" as primary
+}
+
+rectangle "Регион A — зона 2 (AZ2)" as az2 {
+  database "PostgreSQL\nsync / semi-sync replica\n(кворумный ACK)" as replica_sync
+}
+
+rectangle "Регион B (DR)" as regionB {
+  database "PostgreSQL\nasync replica" as replica_async
+}
+
+app --> proxy : запрос
+proxy --> primary : write (writer hostgroup)
+proxy --> replica_sync : read (reader hostgroup)
+
+primary --> replica_sync : физическая репликация (WAL)\nACK перед commit → RPO ≈ 0
+primary --> replica_async : физическая репликация (WAL)\nасинхронно → RPO минуты (DR)
+
+orchestrator --> primary : health-check
+orchestrator --> replica_sync : health-check
+orchestrator ..> proxy : обновляет writer/reader\nhostgroups после failover
+orchestrator ..> primary : fencing старого лидера\nпри split-brain
+
+note bottom of control
+  Кворум (3+ узла DCS) решает, кто лидер.
+  Меньшинство после разрыва сети
+  само прекращает принимать записи —
+  без ручного вмешательства.
+end note
+
+note right of replica_async
+  RTO минуты: promote вручную/по runbook
+  при потере всего региона A (см. план DR, п.4).
+  Не участвует в кворуме записи —
+  иначе каждый commit ждёт межрегиональный RTT.
+end note
+
+note bottom of proxy
+  Приложение не ищет лидера само:
+  proxy маскирует failover.
+  Не закрывает: election, consensus,
+  бэкапы — это control plane и отдельный контур (п.4).
+end note
+
+@enduml
