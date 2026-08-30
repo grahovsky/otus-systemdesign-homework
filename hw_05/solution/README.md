@@ -141,7 +141,39 @@ promote/масштабирование по runbook; on-call по сервису
 ## Observability
 
 ### 5. Ключевые метрики
-_15–20 метрик по RED/USE._
+
+RED — на 4 критичных сервисах пути бронирования (Gateway, Booking, Inventory, Payment) плюс
+Search; USE — на ресурсах под ними (Postgres Tier 0, Kafka, Redis); бизнес — по [целям
+G1–G4 из ДЗ 2](../../hw_02/solution/arc42/01-introduction.md). Каждая метрика — с ответом
+«что предпринимаем, если порог превышен» (детали реакции — в [п.6](#6-алерты)).
+
+| # | Сервис / ресурс | Метод | Метрика | Как меряем | Зачем (что покажет) |
+|---|---|---|---|---|---|
+| 1 | API Gateway | RED | Rate — RPS по эндпоинту/типу операции | counter запросов, label по route | рост трафика виден раньше, чем начнёт расти latency |
+| 2 | API Gateway | RED | Errors — доля 4xx / 5xx раздельно + таймауты | counter по классу status code | 5xx — наша проблема, 4xx — клиентская/бизнес-логика; смешивать нельзя |
+| 3 | API Gateway | RED | Duration — p50 / p95 / p99 времени ответа edge | histogram | p99 показывает хвост, который средняя latency прячет |
+| 4 | Booking | RED | Rate — create/cancel в секунду | counter по операции саги | видит объём критичного оркестратора |
+| 5 | Booking | RED | Errors — доля по причине: `HOLD_FAILED`/`PAYMENT_FAILED`/`PRICE_CHANGED` отдельно от 5xx/timeout | counter c label `reason` | бизнес-отказ (нет мест, цена изменилась) — нормально; отказ инфраструктуры — симптом |
+| 6 | Booking | RED | Duration — p99 полного шага `create → HELD` | histogram end-to-end, не отдельный gRPC-вызов | это latency, которую видит гость, а не внутренний вызов |
+| 7 | Inventory | RED | Rate — Hold/Confirm/Release в секунду | counter по gRPC-методу | видит пиковую конкуренцию за слоты в сезон ([ДЗ 4](../../hw_04/solution/#1-расчёт-rps)) |
+| 8 | Inventory | RED | Errors — отказ «мест нет» отдельно от таймаута/лока на строке | counter c label | «мест нет» — ожидаемо; лок-таймаут на популярном объекте — риск, который уже описан как hotspot в [ДЗ 4](../../hw_04/solution/#6-оптимизация) |
+| 9 | Inventory | RED | Duration — p99 транзакции Hold | histogram | долгая транзакция = растущий риск блокировок именно на горячем объекте, не по системе в среднем |
+| 10 | Payment | RED | Rate — create/confirm/refund в секунду | counter по операции | |
+| 11 | Payment | RED | Errors — наш 5xx / отказ провайдера / таймаут провайдера раздельно | counter c label | не путать «у нас баг» с «провайдер лежит» — реакция разная (см. circuit breaker, [п.3](#3-паттерны-отказоустойчивости)) |
+| 12 | Payment | RED | Duration — p99 **без** времени ожидания 3DS-редиректа | histogram, время редиректа исключено | иначе алертим на то, что вне нашего контроля |
+| 13 | Search | RED | Errors — доля ошибок (не «нет результатов» — это не ошибка) | counter | Search допускает деградацию по данным, но не по доступности ([ADR-0004](../../hw_02/solution/arc42/adr/0004-cqrs-search.md)) |
+| 14 | Search | RED | Duration — p99 | histogram | высокий RPS сервиса — деградация здесь первой бьёт по гостю ещё до Inventory |
+| 15 | PostgreSQL Tier 0 (Booking/Inventory/Payment) | USE | Utilization — % занятых connections пула | pool exporter (pgbouncer/аналог) | насыщение пула — причина растущего p99 у сервиса сверху ([чек-лист метрик ДЗ 5](../Чек-лист%20метрик.md)) |
+| 16 | PostgreSQL Tier 0 реплики | USE | Saturation — replication lag, сек | `pg_stat_replication` | лаг выше нормы = при failover фактический RPO хуже заявленного в [п.1](#1-rto--rpo-по-сервисам) |
+| 17 | Kafka | USE | Saturation — consumer lag по группе (Search / Notification / Booking) | Kafka exporter, per consumer group | догоняет ли обработка поток событий саги — симптом раньше, чем протухнет `booking.confirmed` для Search |
+| 18 | Redis | USE | Utilization — memory + errors — eviction rate | redis exporter | вытеснение hot-кэша поиска/статуса брони = рост нагрузки на OpenSearch/Postgres за кэшем |
+| 19 | Booking (бизнес) | Бизнес | Подтверждённые бронирования в минуту | counter `booking.confirmed` | прямая ценность для пользователя и бизнеса — просадка видна раньше жалоб |
+| 20 | Inventory (бизнес) | Бизнес | Доля hold, снятых по TTL sweeper'ом (не подтверждённых) | `expired / created` за окно | насыщение бизнес-потока: рост доли — либо проблема на шаге оплаты, либо мёртвые hold съедают продукт (потолок отеля, [ДЗ 4](../../hw_04/solution/#6-оптимизация)) |
+
+CPU/RAM по инстансам приложений и насыщение OpenSearch (search queue/rejected requests)
+собираются стандартными exporter'ами инфраструктурного слоя — не выделены отдельными строками,
+т.к. не специфичны для Bookly и не проходят тест «что я предприму, если порог превышен» лучше,
+чем уже перечисленные 20 метрик.
 
 ### 6. Алерты
 _5–7 алертов: порог и реакция._
