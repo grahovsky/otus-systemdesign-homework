@@ -4,7 +4,11 @@
 
 Source of truth для C1/C2. Рендер — [LikeC4](https://likec4.dev).
 
-
+Связь с arc42:
+- **§1** — [`../arc42/01-introduction.md`](../arc42/01-introduction.md)
+- **§4** — [`../arc42/04-solution-strategy.md`](../arc42/04-solution-strategy.md)
+- **§5** — этот каталог (views)
+- **§9** — [`../arc42/adr/`](../arc42/adr/)
 
 ## Структура
 
