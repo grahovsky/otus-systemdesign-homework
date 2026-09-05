@@ -28,8 +28,8 @@ rectangle "Регион B (DR)" as regionB {
 }
 
 app --> proxy : запрос
-proxy --> primary : write (writer hostgroup)
-proxy --> replica_sync : read (reader hostgroup)
+proxy --> primary : write (writer hostgroup)\n+ read на пути саги\n(Hold/Confirm/Release — см. заметку)
+proxy --> replica_sync : read (reader hostgroup,\nтолько вне пути саги)
 
 primary --> replica_sync : физическая репликация (WAL)\nACK перед commit → RPO ≈ 0
 primary --> replica_async : физическая репликация (WAL)\nасинхронно → RPO минуты (DR)
@@ -47,8 +47,9 @@ note bottom of control
 end note
 
 note right of replica_async
-  RTO минуты: promote вручную/по runbook
+  RTO ~15 мин: promote вручную/по runbook
   при потере всего региона A (см. план DR, п.4).
+  RPO ограничен лагом (бюджет ≤ 5 мин, алерт на 30 сек).
   Не участвует в кворуме записи —
   иначе каждый commit ждёт межрегиональный RTT.
 end note
@@ -58,6 +59,17 @@ note bottom of proxy
   proxy маскирует failover.
   Не закрывает: election, consensus,
   бэкапы — это control plane и отдельный контур (п.4).
+end note
+
+note right of proxy
+  Read-after-write на пути саги (Hold/Confirm/Release)
+  идёт с primary, не с replica_sync: даже
+  при кворумном ACK окно между commit на primary
+  и применением на реплике ненулевое, и решение
+  "мест нет/есть" не может основываться на данных,
+  которые могут отставать от только что сделанной
+  своей же записи. Reader hostgroup (replica_sync)
+  используется только для запросов вне пути саги.
 end note
 
 @enduml
