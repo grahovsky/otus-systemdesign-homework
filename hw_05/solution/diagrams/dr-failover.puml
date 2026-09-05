@@ -1,0 +1,61 @@
+@startuml dr-failover
+title Bookly — DR при потере региона A (порядок восстановления по тирам)
+
+left to right direction
+skinparam defaultFontSize 12
+skinparam componentStyle rectangle
+
+actor "Monitoring\n(multi-region health-check)" as monitoring
+actor "Incident Commander" as ic
+actor "Ops / DBA" as ops
+
+rectangle "Регион A — недоступен" as regionA {
+  component "Tier 0: Booking, Inventory,\nPayment, Kafka" as a_tier0
+  component "Tier 1: Catalog, Identity,\nSearch" as a_tier1
+  component "Tier 2: Notification,\nGateway, Redis" as a_tier2
+}
+
+rectangle "Регион B — DR" as regionB {
+  component "Tier 0\nWarm standby\n(async-реплики уже есть)" as b_tier0
+  component "Tier 1\nPilot light\n(данные реплицируются,\ncore не развёрнут)" as b_tier1
+  component "Tier 2\nBackup & Restore\n(поднимается из IaC/бэкапа)" as b_tier2
+}
+
+monitoring --> ic : алерт из ≥2 точек:\nregion A недоступен ≥ 5 мин подряд,\nвнутренний failover не помог
+ic --> ic : объявляет DR\n(не по одному алерту)
+
+ic --> ops : запуск runbook DR
+ops --> b_tier0 : 1) доступы, сеть, секреты\n2) promote async replica → primary\n(Booking/Inventory/Payment/Kafka)
+ops --> b_tier0 : 3) масштабировать инстансы\nдо рабочей нагрузки
+ops --> b_tier0 : 4) reconciliation job\nBooking ↔ Payment\n(сверка с провайдером)
+
+ic --> b_tier0 : 5) переключить routing (DNS/GSLB)\nна регион B
+
+ops --> b_tier1 : 6) Pilot light → развернуть core,\nSearch: переиндексация из Kafka\n+ Catalog/Inventory (не блокирует бронь)
+
+ops --> b_tier2 : 7) Notification/Gateway — повторное развёртывание из образа,\nRedis — холодный старт (кэш пуст, это ожидаемо)
+
+ops --> ic : 8) synthetic-проверка сценариев\n(поиск → hold → оплата → confirm)\nдо объявления «восстановлено»
+
+note bottom of ic
+  Критерий объявления DR: подтверждённая
+  потеря региона, а не единичный кратковременный
+  сбой мониторинга. Ложное объявление DR дороже
+  нескольких минут простоя.
+end note
+
+note bottom of b_tier0
+  Warm standby, не Active-Active: нагрузка
+  (ДЗ 4: пик ~400/25 RPS) не оправдывает
+  постоянное содержание полноразмерного
+  прод-контура в обоих регионах.
+end note
+
+note bottom of b_tier1
+  Pilot light, не warm standby: данные
+  реплицируются постоянно с низкими затратами,
+  вычислительные мощности поднимаются
+  только при объявлении аварии.
+end note
+
+@enduml
