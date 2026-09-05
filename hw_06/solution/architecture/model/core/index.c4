@@ -1,0 +1,13 @@
+// core/index.c4 — система (C1) и контейнеры (C2)
+// TODO: переименовать директорию core/ и ключ `system` под выбранную тему,
+// заполнить контейнеры по декомпозиции из ../../../arc42/04-solution-strategy.md
+
+model {
+  system = system 'System (TBD)' {
+    description 'TODO: 2-3 предложения — что делает система.'
+
+    // gateway = container 'API Gateway' {
+    //   description '...'
+    // }
+  }
+}

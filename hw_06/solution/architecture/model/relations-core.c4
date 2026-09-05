@@ -1,0 +1,6 @@
+// relations-core.c4 — связи с протоколами на рёбрах
+// TODO: заполнить после декомпозиции сервисов (../../../arc42/04-solution-strategy.md)
+
+model {
+  // guest -> system.gateway 'use case' 'HTTPS REST'
+}

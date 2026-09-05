@@ -1,0 +1,13 @@
+// views/c2-containers.c4 — Containers, протоколы на рёбрах
+// TODO: заполнить include по факту заполнения model/core/index.c4 и relations-core.c4
+
+views {
+  view system-c2 {
+    title 'System — Containers (C2)'
+    description 'TODO'
+
+    include system
+
+    autoLayout LeftRight 180 120
+  }
+}

@@ -1,0 +1,9 @@
+// persons.c4 — акторы системы
+// TODO: заполнить по выбранной теме (см. ../../requirements.md)
+
+model {
+  // example_user = person 'Актор' {
+  //   #personTag
+  //   description '...'
+  // }
+}

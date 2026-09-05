@@ -1,0 +1,15 @@
+// views/c1-context.c4 — System Context
+// TODO: заполнить include по факту заполнения model/
+
+views {
+  view system-c1 of system {
+    title 'System — Context (C1)'
+    description 'TODO'
+
+    include system with {
+      navigateTo system-c2
+    }
+
+    autoLayout TopBottom
+  }
+}

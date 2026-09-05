@@ -1,0 +1,9 @@
+// systems-ext.c4 — внешние системы
+// TODO: заполнить по выбранной теме
+
+model {
+  // example_ext = system 'External System' {
+  //   #external
+  //   description '...'
+  // }
+}

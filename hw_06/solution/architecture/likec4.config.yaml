@@ -1,0 +1,19 @@
+# LikeC4 configuration
+# Docs: https://likec4.dev/docs/reference/config
+
+name: hw06
+
+sources:
+  - "./spec.c4"
+  - "./model"
+  - "./views"
+
+output: "./out"
+
+formats:
+  - svg
+  - png
+  - json
+
+editor:
+  port: 3052
