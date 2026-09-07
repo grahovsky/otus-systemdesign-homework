@@ -1,9 +1,10 @@
 // systems-ext.c4 — внешние системы
-// TODO: заполнить по выбранной теме
 
 model {
-  // example_ext = system 'External System' {
-  //   #external
-  //   description '...'
-  // }
+  mobile_app = system 'Mobile App + SDK' {
+    #external
+    description 'Приложение владельца (person app_owner) с встроенным SDK телеметрии.
+Технический источник событий: не сам конечный пользователь приложения, а SDK внутри его
+приложения — батчит и отправляет события, тянет конфиг sampling/feature flags.'
+  }
 }

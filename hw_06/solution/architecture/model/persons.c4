@@ -1,9 +1,10 @@
 // persons.c4 — акторы системы
-// TODO: заполнить по выбранной теме (см. ../../requirements.md)
 
 model {
-  // example_user = person 'Актор' {
-  //   #personTag
-  //   description '...'
-  // }
+  app_owner = person 'Владелец приложения' {
+    #personTag
+    description 'Разработчик/product-owner мобильного приложения — клиент платформы.
+Регистрирует приложение и API-ключи, настраивает определения воронок/метрик и sampling
+для SDK, читает аналитику через Query API.'
+  }
 }

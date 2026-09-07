@@ -1,12 +1,38 @@
 // views/c2-containers.c4 — Containers, протоколы на рёбрах
-// TODO: заполнить include по факту заполнения model/core/index.c4 и relations-core.c4
 
 views {
-  view system-c2 {
-    title 'System — Containers (C2)'
-    description 'TODO'
+  view telemetry-c2 {
+    title 'Telemetry — Containers (C2)'
+    description 'Минимально рабочий контур: регистрация приложения → SDK получает конфиг →
+приём событий → хранение → аналитика. Sync: HTTPS REST (edge). Async: Kafka. Без отдельного
+Gateway — у Ingest API и App/Query API разная аутентификация (API-ключ приложения vs доступ
+владельца) и разные клиенты.'
 
-    include system
+    include telemetry
+    include telemetry.ingest
+    include telemetry.app_config
+    include telemetry.storage_writer
+    include telemetry.query_api
+    include telemetry.kafka
+    include telemetry.clickhouse
+    include telemetry.postgres
+    include telemetry.redis
+
+    include app_owner, mobile_app
+
+    include app_owner -> telemetry.app_config
+    include app_owner -> telemetry.query_api
+    include mobile_app -> telemetry.ingest
+    include mobile_app -> telemetry.app_config
+
+    include telemetry.ingest -> telemetry.redis
+    include telemetry.ingest -> telemetry.app_config
+    include telemetry.ingest -> telemetry.kafka
+    include telemetry.storage_writer -> telemetry.kafka
+    include telemetry.storage_writer -> telemetry.clickhouse
+    include telemetry.query_api -> telemetry.clickhouse
+    include telemetry.query_api -> telemetry.app_config
+    include telemetry.app_config -> telemetry.postgres
 
     autoLayout LeftRight 180 120
   }
