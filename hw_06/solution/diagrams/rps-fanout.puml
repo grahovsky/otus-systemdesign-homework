@@ -1,0 +1,54 @@
+@startuml rps-fanout
+title Telemetry — fan-out: событие ≠ HTTP-запрос
+
+skinparam sequenceMessageAlign center
+skinparam defaultFontSize 12
+
+actor "Владелец приложения" as Owner
+participant "Mobile App + SDK" as SDK
+participant "Ingest API" as Ingest
+participant "App & Config" as Config
+participant "Redis" as Redis
+participant "Kafka events.raw" as Kafka
+participant "Storage Writer" as Writer
+participant "ClickHouse" as CH
+participant "Query API" as Query
+
+== Конфиг SDK (чтение, 2 fetch / DAU / сутки) ==
+
+SDK -> Config : GET sdk-config (sampling / feature flags)
+Config -> Config : Postgres lookup (метаданные, не поток событий)
+Config --> SDK : 2 КБ JSON
+
+== Приём батча (запись): 10 событий = 1 HTTP, не 10 ==
+
+SDK -> Ingest : POST batch (gzip, API-key)\n~10 событий / 5 КБ до gzip
+Ingest -> Redis : GET ключ + INCR rate-limit + SET event_id ×10
+Ingest -> Kafka : produce батча (не ждём ClickHouse)
+Ingest --> SDK : 202 Accepted — принято в буфер\n(p99 < 300 мс)
+
+== Материализация (async, не в RPS клиента) ==
+
+Writer -> Kafka : consume events.raw
+Writer -> CH : batch INSERT раз в 2 с\n(пик ~22 тыс. строк / INSERT)
+note right of CH
+  Идемпотентная вставка по event_id.
+  Query видит событие после flush, не после 202.
+end note
+
+== Аналитика (чтение, единицы RPS) ==
+
+Owner -> Query : funnel / retention / DAU-MAU / сегменты
+Query -> Config : funnel & metric definitions
+Query -> CH : query-time по сырью (90 д)\nDAU/MAU — из MV (2 года)
+Query --> Owner : JSON, p95 < 2 с
+
+note over SDK, Query
+  Пик ×3 на все строки (суточный профиль).
+  Сайзим Kafka/Writer/CH по 11 111 соб/с,
+  Ingest — по 1 111 HTTP, Query — по ~3 HTTP.
+  Кэш ключа — cache-aside в Ingest, не на Gateway
+  (отдельного Gateway нет).
+end note
+
+@enduml
