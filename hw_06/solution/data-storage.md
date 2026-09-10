@@ -4,6 +4,8 @@
 
 ## 1. Модель данных
 
+Схема: [`diagrams/er-data-model.puml`](diagrams/er-data-model.puml).
+
 | Сервис | Хранилище | Что хранит |
 |---|---|---|
 | App & Config | PostgreSQL | `apps` (схема события, sampling, feature flags), `api_keys`, `funnel_definitions`, `metric_definitions` |
@@ -55,6 +57,8 @@
 
 ## 3. Шардирование
 
+Схема: [`diagrams/sharding.puml`](diagrams/sharding.puml).
+
 ### Шаг 0. Нужно ли?
 
 | Хранилище | Объём / нагрузка сейчас | Вертикаль + реплики | Вывод |
@@ -94,6 +98,8 @@ Cross-shard write-path: **нет**. Одно событие принадлежи
 
 ## 4. Кэширование
 
+Схема: [`diagrams/caching-flow.puml`](diagrams/caching-flow.puml).
+
 | Что кэшируем | Уровень | Стратегия | TTL | Инвалидация | Зачем |
 |---|---|---|---|---|---|
 | API-ключ + схема события + sampling (hot path Ingest) | Redis (app) | cache-aside | **5 мин** | только TTL | снять 1 111 HTTP ingest с App & Config; hit 99.5 % → ~6 RPS промахов в пике ([`sizing.md` A8](sizing.md)). Push из App & Config в Redis нет ([`arc42/04-solution-strategy.md` §4.4](arc42/04-solution-strategy.md#44-асинхронность--где-и-зачем)) |
@@ -123,6 +129,8 @@ Stale:
 ---
 
 ## 5. Очереди / асинхронность на хранении
+
+Схема: [`diagrams/queues.puml`](diagrams/queues.puml).
 
 **Брокер: Kafka**
 

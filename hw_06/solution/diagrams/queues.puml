@@ -1,0 +1,51 @@
+@startuml queues
+title Telemetry — Kafka: events.raw + retry / DLT
+
+left to right direction
+skinparam defaultFontSize 12
+skinparam componentStyle rectangle
+
+rectangle "Producer" as prod {
+  component "Ingest API" as ingest
+}
+
+queue "Kafka — main" as kafka {
+  collections "events.raw\nkey=app_id\n4 партиции, по 2 на шард CH\nтот же directory, что ClickHouse" as t_raw
+}
+
+rectangle "Consumer group" as cg {
+  component "Storage Writer" as writer
+}
+
+database "ClickHouse\nshard по app_id" as ch
+
+queue "Error path (Storage Writer)" as err {
+  collections "events.raw.storage-writer.retry\nbackoff / N" as t_retry
+  collections "events.raw.storage-writer.dlt\npoison / exhausted" as t_dlt
+}
+
+ingest --> t_raw : produce после Redis\n(не outbox: своей БД событий нет)
+t_raw --> writer
+writer --> ch : batch INSERT раз в 2 с\nидемпотентно по event_id
+
+writer -[#orange]-> t_retry : transient fail INSERT
+t_retry --> writer : reprocess
+writer -[#red]-> t_dlt : exhausted / poison
+
+note bottom of err
+  Per consumer group, не общий retry «на систему»:
+  main → fail → .retry (N, backoff)
+  → fail → .dlt + алерт.
+  Main не блокируется poison-batch;
+  соседние партиции другого шарда продолжают flush.
+  Replay с DLT безопасен: дедуп event_id
+  в Redis (окно) и в ClickHouse.
+end note
+
+note right of ingest
+  Не через Kafka:
+  sdk-config, CRUD владельца,
+  промах кэша ключа, дедуп, rate-limit.
+end note
+
+@enduml

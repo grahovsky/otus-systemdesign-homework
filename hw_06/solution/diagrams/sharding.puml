@@ -1,0 +1,39 @@
+@startuml sharding
+title ClickHouse — шардирование по app_id (ADR-0004)
+
+left to right direction
+skinparam defaultFontSize 12
+skinparam componentStyle rectangle
+
+actor "Query API\n(funnel / retention /\nсегменты / DAU-MAU)" as query
+actor "Storage Writer" as writer
+
+rectangle "Directory app_id → шард\nбиннинг по суточному объёму\nне hash % N" as dir
+
+database "Shard 0\n2 реплики\nORDER BY (app_id, event_time)\nPARTITION received_at" as s0
+database "Shard 1\n2 реплики\nто же" as s1
+
+query --> dir : appId из пути запроса
+writer --> dir : app_id батча
+dir --> s0
+dir --> s1
+
+note bottom of dir
+  Запрос по одному appId —
+  один шард, без scatter-gather.
+  Старт: 2 шарда × 2 реплики.
+  Kafka events.raw партиционируется
+  тем же directory (см. queues.puml),
+  чтобы writer шарда N не писал в оба шарда.
+end note
+
+note right of s0
+  Hotspot (2% потока, ~36 ГБ / 90 д)
+  целиком на одном шарде.
+  Добавление шардов этот скан не ускоряет.
+  Лечение вне ключа: pre-aggregation /
+  sampling / схема для этого клиента
+  (sizing.md §5), не смена ключа на user_id.
+end note
+
+@enduml
