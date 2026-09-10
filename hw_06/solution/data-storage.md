@@ -17,7 +17,7 @@
 
 Инварианты:
 
-- **Единственный SoT событий — ClickHouse `events`.** HTTP 202 Ingest означает «батч в Kafka», не «строка в SoT».
+- **Единственный SoT событий — ClickHouse `events`.** HTTP 202 Ingest означает «батч в Kafka», не «строка в SoT» ([ADR-0001](arc42/adr/0001-batch-insert-clickhouse.md)).
 - Redis нигде не источник правды: промах или рестарт восстанавливаются из Postgres (ключ/схема) или повторной вставкой в ClickHouse (дедуп по `event_id`).
 - `app_id` в событиях — логическая ссылка на `apps.app_id`, без физического FK между PostgreSQL и ClickHouse.
 - Партиция сырых событий — по **времени приёма на сервере** (`received_at`), не по `event_time` устройства: clock skew ломает окна воронки и границы партиций ([`requirements.md` §1.3](requirements.md#13-риски-и-ограничения)).
@@ -32,14 +32,14 @@
 | App & Config | приложения, ключи, definitions | реляционная, малый объём (~40 МБ) | CRUD владельца, lookup ключа/схемы, чтение funnel definition | **PostgreSQL** | уникальность имени у владельца, ACID на создании приложения и ключа в одной транзакции ([`api/app-registration.md`](api/app-registration.md)); 2 000 строк — не повод для отдельного класса СУБД |
 | Storage Writer / Query API | сырые события + DAU/MAU | колоночные факты, append-only | INSERT батчами ~22 тыс. строк; funnel/retention/сегменты — скан по одному `app_id` за дни/недели; DAU/MAU — чтение MV | **ClickHouse** | колоночное сжатие ×8 и скан среднего приложения (0.9 ГБ / 90 дней) в бюджете p95 < 2 с ([`sizing.md` §2, §5](sizing.md)); MergeTree рассчитан на батч-INSERT, не на точечный UPDATE |
 | Ingest API (hot path) | кэш, дедуп, лимиты | key-value + TTL | GET ключа, SET `event_id`, INCR лимита | **Redis** | p99 ingest < 300 мс не допускает синхронный Postgres на каждый батч; TTL-семантика окна дедупа и счётчика — нативная |
-| Ingest → Writer | принятые батчи | лог сообщений | produce / consume, replay при простое writer | **Kafka** | буфер на часы простоя writer, at-least-once, развязка p99 ingest от OLAP-вставки |
+| Ingest → Writer | принятые батчи | лог сообщений | produce / consume, replay при простое writer | **Kafka** | буфер на часы простоя writer, at-least-once, развязка p99 ingest от OLAP-вставки ([ADR-0001](arc42/adr/0001-batch-insert-clickhouse.md)) |
 
 Четыре системы — не «по умолчанию»: у каждой свой паттерн доступа. Метаданные не кладутся в ClickHouse (точечный CRUD и уникальность), события — не в Postgres (скан терабайт и мелкий INSERT).
 
 Инварианты выбора (что **не** ставим):
 
 - **PostgreSQL как SoT событий.** 2.3 ТБ сжатых на 90 дней ([`sizing.md` §2](sizing.md)) в строчном хранилище не сжимаются ×8 и не сканируются под funnel p95 < 2 с. Мелкий INSERT 11 111 соб/с — тот же антипаттерн, что и построчная запись в MergeTree, только без колоночного выигрыша на чтении.
-- **Cassandra / Scylla под события.** Write-path горизонтален, но funnel/retention — агрегаты по времени и уникальным `user_id` внутри одного `app_id`, а не точечное чтение по ключу партиции. Денормализация под каждый query-эндпоинт вернула бы pre-aggregation.
+- **Cassandra / Scylla под события.** Write-path горизонтален, но funnel/retention — агрегаты по времени и уникальным `user_id` внутри одного `app_id`, а не точечное чтение по ключу партиции. Денормализация под каждый query-эндпоинт вернула бы pre-aggregation, отвергнутую в [ADR-0003](arc42/adr/0003-query-time-vs-pre-aggregation.md).
 - **MongoDB / документные.** Гибкая схема провоцирует незарегистрированные properties — прямой риск кардинальности из [`requirements.md` §1.3](requirements.md#13-риски-и-ограничения). Агрегации по десяткам миллионов событий на приложение слабее колоночного скана; операционно это пятая СУБД без выигрыша на метаданных (их 40 МБ уже в Postgres).
 - **Elasticsearch / OpenSearch как аналитический SoT.** Инвертированный индекс нужен для полнотекста, которого в продукте нет (четыре фиксированных query-эндпоинта). Хранение 90 дней сырья дороже ClickHouse, near-real-time refresh не требуется: горизонт воронки — часы/дни.
 - **TimescaleDB.** Гипертаблицы закрывают TTL и time-range, но уникальные пользователи воронки/retention и HLL DAU/MAU — сильная сторона ClickHouse, не row-store на Postgres. Отдельная СУБД рядом с уже нужным Postgres ради одного паттерна не окупается.
@@ -51,7 +51,7 @@
 - Не одна БД «по умолчанию»: Postgres (ACID метаданных) + ClickHouse (OLAP-скан) + Redis (TTL/hot path) + Kafka (буфер).
 - Экзотика не взята: Cassandra/Mongo/ES/Timescale/NewSQL отвергнуты с причиной, привязанной к запросам.
 - Операционная стоимость учтена: метаданные не вынесены в отдельный NoSQL, события не дублируются в ES «на всякий случай».
-- Где не SQL — явно чем пожертвовали: Redis — не SoT, расхождение с Postgres на TTL 5 мин; Kafka — at-least-once, не exactly-once. ClickHouse — нет точечного UPDATE, запись только батчами.
+- Где не SQL — явно чем пожертвовали: Redis — не SoT, расхождение с Postgres на TTL 5 мин; Kafka — at-least-once, не exactly-once ([ADR-0002](arc42/adr/0002-idempotency-not-exactly-once.md)); ClickHouse — нет точечного UPDATE, запись только батчами.
 
 ---
 
@@ -66,13 +66,13 @@
 | PostgreSQL | ~40 МБ, write < 1 RPS | хватает с запасом (слот 50 ГБ в сайзинге) | **не шардируем** |
 | Redis | слот 32 ГБ (окно дедупа), ~13 тыс. ops/s в пике | одна пара primary+replica; к году 3 — слот 64 ГБ, без шардов | **не шардируем** |
 | Kafka `events.raw` | 60 ГБ на 12 ч, RF = 3 | 3 брокера; партиции, не шарды данных | **не шардируем как БД**; партиционирование топика — ниже |
-| ClickHouse `events` | 2.3 ТБ / реплика сейчас, 4.6 ТБ к году 3; insert 11 111 соб/с | диск сырья к 3 году — 9.4 ТБ на две реплики без шардов ([`sizing.md` §2](sizing.md)); реплика на чтение не снимает объём с ноды | **шардируем**; старт 2 × 2 |
+| ClickHouse `events` | 2.3 ТБ / реплика сейчас, 4.6 ТБ к году 3; insert 11 111 соб/с | диск сырья к 3 году — 9.4 ТБ на две реплики без шардов ([`sizing.md` §2](sizing.md)); реплика на чтение не снимает объём с ноды | **шардируем**; старт 2 × 2 ([ADR-0004](arc42/adr/0004-shard-by-app-id.md)) |
 
 Insert 11 111 соб/с одну реплику MergeTree не перегружает. Шарды нужны из-за **диска и локальности скана**, не из-за RPS записи. Больше двух шардов на старте не берём: добавление шардов не ускоряет запрос hotspot-приложения, оно целиком на одном шарде ([`sizing.md` A12, §5](sizing.md)).
 
 ### Кандидаты в ключи (ClickHouse `events`)
 
-Разбор и отвергнутый `hash(user_id)`.
+Разбор и отвергнутый `hash(user_id)` — в [ADR-0004](arc42/adr/0004-shard-by-app-id.md), здесь итог.
 
 | Кандидат | Равномерность | Локальность | Hotspot | Вывод |
 |---|---|---|---|---|
@@ -103,19 +103,19 @@ Cross-shard write-path: **нет**. Одно событие принадлежи
 | Что кэшируем | Уровень | Стратегия | TTL | Инвалидация | Зачем |
 |---|---|---|---|---|---|
 | API-ключ + схема события + sampling (hot path Ingest) | Redis (app) | cache-aside | **5 мин** | только TTL | снять 1 111 HTTP ingest с App & Config; hit 99.5 % → ~6 RPS промахов в пике ([`sizing.md` A8](sizing.md)). Push из App & Config в Redis нет ([`arc42/04-solution-strategy.md` §4.4](arc42/04-solution-strategy.md#44-асинхронность--где-и-зачем)) |
-| Окно `event_id` | Redis | SET NX + EXPIRE | **6 ч** | expire | дедуп ретраев SDK без exactly-once. TTL больше retry-budget (минуты) и покрывает часы офлайна; 24 ч раздуло бы слот без выигрыша для аналитики (A9) |
+| Окно `event_id` | Redis | SET NX + EXPIRE | **6 ч** | expire | дедуп ретраев SDK без exactly-once ([ADR-0002](arc42/adr/0002-idempotency-not-exactly-once.md)). TTL больше retry-budget (минуты) и покрывает часы офлайна; 24 ч раздуло бы слот без выигрыша для аналитики (A9) |
 | Счётчик rate-limit per-app | Redis | INCR + EXPIRE на окно | = длина окна (минуты) | expire | per-app лимит на ingest; SoT лимита нет в Postgres — это runtime-ограждение, не бизнес-запись |
 | SDK-конфиг на устройстве | клиент (SDK) | cache-aside на сессию | сессия | следующий fetch при старте сессии | не ходить в App & Config на каждый батч; sampling и так меняется редко ([`api/sdk-config.md`](api/sdk-config.md)) |
 
 **Явно не кэшируем:**
 
-- Результаты Query API (funnel / retention / сегменты / DAU-MAU). Пик ~3 HTTP ([`sizing.md` §1](sizing.md)): кэш не меняет счёт и не является узким местом. Свежесть витрины конфликтовала бы с query-time по definitions: смена шагов воронки должна быть видна на следующем запросе, а не через TTL дашборда. DAU/MAU уже «кэш» на уровне БД — MV в ClickHouse.
+- Результаты Query API (funnel / retention / сегменты / DAU-MAU). Пик ~3 HTTP ([`sizing.md` §1](sizing.md)): кэш не меняет счёт и не является узким местом. Свежесть витрины конфликтовала бы с query-time по definitions ([ADR-0003](arc42/adr/0003-query-time-vs-pre-aggregation.md)): смена шагов воронки должна быть видна на следующем запросе, а не через TTL дашборда. DAU/MAU уже «кэш» на уровне БД — MV в ClickHouse.
 - Сырые события и промежуточные агрегаты воронки — SoT = ClickHouse, повторный скан дешевле сложного ключа кэша по `(app, definition, range)`.
 
 Stale:
 
 - Ключ/схема: до 5 мин после ротации или смены `event_schema`. Ротация ключа — редкая операция владельца; отозванный ключ принимается не дольше TTL. Это принятый trade-off против синхронного Postgres на каждый батч (иначе p99 ingest привязан к App & Config).
-- `event_id` за пределами 6 ч: редкий дубль может попасть в сырьё; агрегаты устойчивы к единичным дублям. Второй барьер — идемпотентная вставка в ClickHouse.
+- `event_id` за пределами 6 ч: редкий дубль может попасть в сырьё; агрегаты устойчивы к единичным дублям ([ADR-0002](arc42/adr/0002-idempotency-not-exactly-once.md)). Второй барьер — идемпотентная вставка в ClickHouse.
 - Rate-limit: после expire окна счётчик обнуляется — ожидаемое поведение fixed window.
 - SDK-конфиг: до конца сессии; смена sampling без релиза приложения проявляется на следующей сессии — допустимо, горизонт аналитики часы/дни.
 
@@ -132,7 +132,7 @@ Stale:
 
 Схема: [`diagrams/queues.puml`](diagrams/queues.puml).
 
-**Брокер: Kafka**
+**Брокер: Kafka** (зафиксирован в [ADR-0001](arc42/adr/0001-batch-insert-clickhouse.md) и [`arc42/04-solution-strategy.md` §4.3](arc42/04-solution-strategy.md#43-протоколы--микс)).
 
 Outbox-паттерна, как у нескольких writers в одной транзакции с бизнес-таблицей, **нет**: Ingest не пишет события в свою СУБД. Транспорт в SoT — сам топик `events.raw`. Саги между сервисами нет: единственный потребитель сырья, которому нужна доставка в ClickHouse, — Storage Writer.
 
@@ -153,7 +153,7 @@ Outbox-паттерна, как у нескольких writers в одной т
 
 **Retry / DLT** — на consumer group Storage Writer, не общий error-топик «на всю систему»: других CG на `events.raw` нет, и заводить общий retry «на будущее» смешало бы некорректные сообщения разных потребителей. Main не блокируется poison-batch: сбой вставки одного батча уходит в retry/DLT, соседние партиции (другой шард / другие `app_id`) продолжают flush раз в 2 с ([`sizing.md` A11](sizing.md)).
 
-Идемпотентность: at-least-once на топике + дедуп `event_id` в Redis (окно) и при INSERT в ClickHouse. Replay с DLT безопасен в пределах этого барьера.
+Идемпотентность: at-least-once на топике + дедуп `event_id` в Redis (окно) и при INSERT в ClickHouse ([ADR-0002](arc42/adr/0002-idempotency-not-exactly-once.md)). Replay с DLT безопасен в пределах этого барьера.
 
 **Не через Kafka:**
 

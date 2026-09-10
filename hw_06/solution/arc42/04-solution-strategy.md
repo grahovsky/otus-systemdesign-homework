@@ -47,7 +47,7 @@ API (доступ владельца приложения) разная моде
 | Mobile App + SDK → App & Config Service | **HTTPS REST** | Разовый pull конфига при старте сессии, не sync-цепочка команд |
 | Владелец приложения → App & Config / Query API | **HTTPS REST** | Публичный CRUD/аналитические запросы, без внутреннего RPC-контракта |
 | Ingest API → App & Config Service | **HTTPS REST** | Fallback при промахе Redis: ключ, схема события, sampling. Не hot path при попадании в кэш |
-| Ingest API → Storage Writer | **Kafka** (`events.raw`) | Развязка пиков записи, буфер на случай простоя writer'а, at-least-once |
+| Ingest API → Storage Writer | **Kafka** (`events.raw`) | Развязка пиков записи, буфер на случай простоя writer'а, at-least-once. Ключ партиции — `app_id` по тому же directory, что шард ClickHouse ([`../data-storage.md` §3, §5](../data-storage.md)) |
 | Storage Writer → ClickHouse | **Native protocol, batch insert** | Батч, а не построчный INSERT — см. §4.1 |
 | Query API → App & Config Service | **HTTPS REST** | Редкие запросы за определениями воронки, не hot path |
 
@@ -60,7 +60,7 @@ API (доступ владельца приложения) разная моде
 | Сценарий | Async? | Почему |
 |---|---|---|
 | Приём батча событий | Sync HTTPS (ответ SDK) + **async запись в хранилище** | SDK должен получить подтверждение приёма быстро (p99 < 300 мс), но не должен ждать вставки в ClickHouse |
-| Запись в ClickHouse | **Async Kafka → Storage Writer** | Батчинг вставки — обязательное требование ClickHouse (§4.1), синхронная запись недостижима на нужном p99 |
+| Запись в ClickHouse | **Async Kafka → Storage Writer** | Батчинг вставки — обязательное требование ClickHouse (§4.1), синхронная запись недостижима на нужном p99. Transient-сбой INSERT — retry-топик той же consumer group, исчерпание — DLT ([`../data-storage.md` §5](../data-storage.md#5-очереди--асинхронность-на-хранении)) |
 | Fetch SDK-конфига | Sync HTTPS | Конфиг нужен SDK перед стартом сессии, ответ короткий (Postgres-lookup) |
 | Промах кэша ключа/конфига на ingest | Sync HTTPS к App & Config | Cache-aside: Ingest читает Redis; при промахе запрашивает App & Config и пишет в Redis с TTL. Push из App & Config в Redis не используется |
 | Query API запросы | Sync HTTPS | Владелец приложения ждёт результат в дашборде; latency бюджет — p95 < 2 с, не требует async-паттерна |
