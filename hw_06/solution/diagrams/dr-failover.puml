@@ -1,0 +1,66 @@
+@startuml dr-failover
+title Telemetry — DR при потере региона A (порядок восстановления)
+
+left to right direction
+skinparam defaultFontSize 12
+skinparam componentStyle rectangle
+
+actor "Monitoring\n(multi-region health-check)" as monitoring
+actor "Incident Commander" as ic
+actor "Ops / DBA" as ops
+actor "on-call backend" as oncall
+
+rectangle "Регион A — недоступен" as regionA {
+  component "Ingest API, Kafka,\nStorage Writer, Query API\n(Pilot light / Warm Standby)" as a_compute
+  database "ClickHouse\n(Backup & Restore)" as a_ch
+  database "PostgreSQL\n(Warm Standby)" as a_pg
+}
+
+rectangle "Регион B — DR" as regionB {
+  component "Ingest API, Query API,\nStorage Writer\nPilot light → масштабировать" as b_compute
+  component "Kafka\nWarm standby\n(MirrorMaker2/Cluster Linking)" as b_kafka
+  database "ClickHouse\nвосстановить из бэкапа\n(порядок часов)" as b_ch
+  database "PostgreSQL\nasync replica → promote" as b_pg
+}
+
+monitoring --> ic : алерт из ≥2 точек:\nрегион A недоступен ≥5 мин,\nвнутренний failover не помог
+ic --> ic : объявляет DR
+
+ic --> ops : запуск runbook DR
+ops --> regionB : 1) доступы, сеть, секреты
+
+ops --> b_kafka : 2) cutover producer/consumer\nна кластер региона B\n(consumer group по timestamp,\nне по offset)
+ops --> b_compute : 3) масштабировать Ingest API\nдо рабочей ёмкости —\nприём событий возобновлён
+
+ops --> b_ch : 4) restore из последнего бэкапа\n(≈1.5 ТБ/реплика, часы) —\nпараллельно с шагом 3,\nне блокирует приём
+b_compute -[#blue]-> b_ch : 4a) backfill дельты:\nStorage Writer вычитывает Kafka\nс точки бэкапа, идемпотентная вставка
+
+ops --> b_pg : 5) promote async-реплики\nдо primary
+
+oncall --> ic : 6) сверка count по app_id/окну —\nbackfill завершён без потери событий
+ops --> ic : 7) synthetic-проверка\n(батч → Ingest → Kafka → Writer →\nClickHouse → Query API отдаёт данные)
+
+note bottom of ic
+  Критерий DR: подтверждённая потеря
+  региона (≥2 точки мониторинга),
+  не единичный алерт. Ложный DR
+  дороже нескольких минут простоя.
+end note
+
+note bottom of b_ch
+  Backup & Restore, не Warm Standby:
+  постоянная вторая копия ClickHouse
+  удвоила бы треть счёта системы
+  (sizing.md §4) ради простоя без
+  денежного риска в моменте.
+end note
+
+note right of b_compute
+  Ingest API снова доступен раньше,
+  чем готов ClickHouse — асинхронная
+  развязка (ADR-0001) защищает
+  доступность приёма во время
+  восстановления SoT.
+end note
+
+@enduml
