@@ -13,6 +13,7 @@
 | `rps-fanout.puml` | [3. Сайзинг](../sizing.md) | откуда берутся запросы в сервисы (fan-out) |
 | `replication-ha.puml` | [6. Надёжность](../reliability.md) | data/control/routing plane репликации |
 | `dr-failover.puml` | [6. Надёжность](../reliability.md) | порядок переключения при DR |
+| `auth-planes.puml` | [7. Безопасность](../security.md) | два внешних контура (API-ключ / JWT) и mTLS внутри |
 
 Рендер: `plantuml diagrams/*.puml` или расширение PlantUML в IDE.
 

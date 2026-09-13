@@ -1,0 +1,60 @@
+@startuml auth-planes
+title Telemetry — контуры аутентификации
+
+left to right direction
+skinparam defaultFontSize 12
+skinparam componentStyle rectangle
+
+actor "Mobile App + SDK" as SDK
+actor "Владелец приложения" as Owner
+component "Внешний IdP\n(не контейнер C2)" as IdP
+
+rectangle "Публичный периметр — TLS 1.2+" as pub {
+  component "Ingest API" as Ingest
+  component "App & Config" as Config
+  component "Query API" as Query
+}
+
+rectangle "Внутренний периметр — не доверен по умолчанию" as intern {
+  database "Redis\nlookup по key_hash\n(не plaintext ключа)" as Redis
+  database "PostgreSQL\napi_keys.key_hash" as PG
+  queue "Kafka" as Kafka
+  component "Storage Writer" as Writer
+  database "ClickHouse" as CH
+}
+
+SDK --> Ingest : X-Api-Key\nHTTPS REST
+SDK --> Config : X-Api-Key\nHTTPS REST\n(sdk config)
+Owner --> IdP : логин
+Owner --> Config : Bearer JWT\nHTTPS REST
+Owner --> Query : Bearer JWT\nHTTPS REST
+IdP --> Config : JWKS (кэш до ротации)
+IdP --> Query : JWKS (кэш до ротации)
+
+Ingest --> Redis : GET app:{key_hash}
+Ingest --> Config : fallback ключ/схема\nmTLS + service identity
+Query --> Config : funnel/metric definitions\nmTLS + service identity
+Config --> PG : SQL + TLS
+Ingest --> Kafka : produce events.raw\nTLS + credentials
+Writer --> Kafka : consume
+Writer --> CH : batch INSERT\nTLS + credentials
+Query --> CH : SELECT\nTLS + credentials
+
+note bottom of IdP
+  JWT владельца выпускает IdP,
+  не продукт. Identity в C2 нет:
+  логин не часть ingest/аналитики.
+  Inbound-вебхуков нет —
+  подпись внешнего провайдера
+  не применяется.
+end note
+
+note bottom of intern
+  Сеть внутри кластера не доверенная.
+  HTTP-рёбра сервисов — mTLS,
+  не пользовательский JWT.
+  Kafka / CH / PG / Redis —
+  TLS + секреты из Vault.
+end note
+
+@enduml

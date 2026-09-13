@@ -2,7 +2,8 @@
 
 > Часть [решения ДЗ 6](README.md). Система: сервис телеметрии мобильных приложений
 > (контейнеры — [`architecture/`](architecture/), контракты — [`api/`](api/),
-> хранилища — [`data-storage.md`](data-storage.md)).
+> хранилища — [`data-storage.md`](data-storage.md)). Схема контуров —
+> [`diagrams/auth-planes.puml`](diagrams/auth-planes.puml).
 
 Два клиентских контура уже разведены в декомпозиции: отдельного API Gateway нет, потому что
 у Ingest (SDK, API-ключ) и у App & Config / Query API (владелец, JWT) разные клиенты и

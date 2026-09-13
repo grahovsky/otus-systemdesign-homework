@@ -12,12 +12,12 @@ database "PostgreSQL" as PG
 == API-ключ и схема (TTL 5 мин) ==
 
 SDK -> Ingest : POST /v1/events (X-Api-Key)
-Ingest -> Redis : GET app:{key}
+Ingest -> Redis : GET app:{key_hash}
 opt miss
   Ingest -> Config : GET ключ / схема / sampling
-  Config -> PG : SELECT
+  Config -> PG : SELECT по key_hash
   Config --> Ingest : app_id, schema, limits
-  Ingest -> Redis : SETEX 5min
+  Ingest -> Redis : SETEX app:{key_hash} 5min
 end
 note right of Ingest
   Stale после revoke — до 5 мин (только TTL).
