@@ -1,0 +1,51 @@
+@startuml trace-flow
+title Telemetry — сквозной trace: sync ingest + async запись
+
+skinparam sequenceMessageAlign center
+skinparam defaultFontSize 12
+
+actor "Mobile App + SDK" as SDK
+participant "Ingest API" as Ingest
+participant "Redis" as Redis
+queue "Kafka\nevents.raw" as Kafka
+participant "Storage Writer" as Writer
+database "ClickHouse" as CH
+
+actor "Владелец приложения" as Owner
+participant "Query API" as Query
+
+== Синхронный путь (SDK → 202) ==
+
+SDK -> Ingest : POST /v1/events\nX-Request-Id, X-Api-Key
+Ingest -> Ingest : trace_id = request_id\n(или новый, если заголовка нет)
+Ingest -> Redis : lookup ключа / дедуп / rate-limit
+Ingest -> Kafka : produce batch\nheader traceparent
+Ingest --> SDK : 202 Accepted\n(батч в буфере, не в SoT)
+
+note right of Kafka
+  HTTP 202 ≠ строка в ClickHouse.
+  Без traceparent в заголовках
+  async-продолжение — новый корневой спан.
+end note
+
+== Асинхронный путь (тот же trace_id) ==
+
+Kafka -> Writer : consume\ntraceparent из headers
+Writer -> CH : batch INSERT\nидемпотентно по event_id
+opt INSERT не удался
+  Writer -> Writer : retry-топик, затем DLT\nтот же trace_id
+end
+
+== Query — отдельный trace ==
+
+Owner -> Query : GET analytics\nX-Request-Id, Bearer JWT
+Query -> CH : SELECT по app_id
+Query --> Owner : 200
+
+note over Owner, Query
+  Другой актор и другой момент:
+  склеивать с батчем SDK по trace_id нельзя.
+  Корреляция с ingest — app_id + окно received_at.
+end note
+
+@enduml

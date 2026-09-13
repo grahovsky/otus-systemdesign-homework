@@ -14,6 +14,7 @@
 | `replication-ha.puml` | [6. Надёжность](../reliability.md) | data/control/routing plane репликации |
 | `dr-failover.puml` | [6. Надёжность](../reliability.md) | порядок переключения при DR |
 | `auth-planes.puml` | [7. Безопасность](../security.md) | два внешних контура (API-ключ / JWT) и mTLS внутри |
+| `trace-flow.puml` | [8. Observability](../observability.md) | сквозной trace: sync ingest + async запись, Query отдельно |
 
 Рендер: `plantuml diagrams/*.puml` или расширение PlantUML в IDE.
 

@@ -2,7 +2,8 @@
 
 > Часть [решения ДЗ 6](README.md). Система: сервис телеметрии мобильных приложений
 > (контейнеры — [`architecture/`](architecture/), нагрузка — [`sizing.md`](sizing.md),
-> хранилища — [`data-storage.md`](data-storage.md)).
+> хранилища — [`data-storage.md`](data-storage.md)). Схема трейса —
+> [`diagrams/trace-flow.puml`](diagrams/trace-flow.puml).
 
 Критичный путь — приём батча и доставка в ClickHouse, не дашборд: потеря события на Ingest
 или до вставки в SoT необратима, простой Query только откладывает чтение
@@ -178,7 +179,7 @@ Severity:        warning
 продолжается асинхронно (Storage Writer → INSERT в ClickHouse). HTTP 202 означает «в
 буфере», не «строка в SoT» ([ADR-0001](arc42/adr/0001-batch-insert-clickhouse.md)). Без
 сквозного `trace_id` на обоих отрезках «событие принято, но не в воронке» распадается на
-два несвязанных фрагмента.
+два несвязанных фрагмента — схема: [`diagrams/trace-flow.puml`](diagrams/trace-flow.puml).
 
 **Логи** — структурированный JSON. Обязательные поля каждой записи: `timestamp`,
 `service` + `instance`, `severity`, `trace_id` / `span_id`, `request_id`, `app_id`.
