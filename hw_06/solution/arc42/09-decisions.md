@@ -11,3 +11,13 @@
 | [ADR-0003](adr/0003-query-time-vs-pre-aggregation.md) | Query-time агрегация vs pre-aggregation | Accepted | На MVP — query-time расчёт по сырым событиям ClickHouse; отдельные materialized views под DAU/MAU (retention 2 года), без pre-aggregation под каждый из 4 query-эндпоинтов |
 | [ADR-0004](adr/0004-shard-by-app-id.md) | Шардирование ClickHouse по `app_id` | Accepted | Шард-ключ — `app_id`, не `hash(user_id)`: funnel/retention/сегменты всегда фильтруют по одному `appId`; hotspot-приложение остаётся точечной эскалацией, не меняет ключ для всех |
 | [ADR-0005](adr/0005-ingest-config-degraded-mode.md) | Деградация Ingest при недоступности App & Config | Accepted | При промахе кэша и недоступном App & Config Ingest обслуживает запрос из просроченного кэша до 30 мин (fail-open, ограниченный по времени), не отклоняет батч сразу (fail-closed) — иначе Tier 1-сбой App & Config эскалирует в Tier 0-потерю событий (см. [`../reliability.md` §3](../reliability.md#3-паттерны-отказоустойчивости)) |
+
+## Кандидаты (закрыты в security.md, без отдельного ADR)
+
+Развилки ниже не тянут на ADR уровня 0001–0005: одна закрыта отсутствием контейнера в C2,
+вторая — уточнение транспорта на уже выбранных HTTP-рёбрах.
+
+| Тема | Решение | Почему не ADR |
+|---|---|---|
+| Identity в C2 vs внешний IdP | JWT владельца выпускает внешний IdP; App & Config и Query API проверяют подпись по кэшируемому JWKS. Identity-сервис в C2 не добавляем | Логин/пароль владельца не часть цепочки ingest → аналитика; JWT уже в API-контрактах без своего issuer. Полный ADR дублировал бы [`../security.md` §1](../security.md#1-аутентификация--авторизация) |
+| mTLS на внутренних HTTP при отсутствии gRPC | mTLS + короткоживущий service identity на Ingest/Query → App & Config; Kafka/CH/PG/Redis — TLS + credentials из секрет-хранилища | Протокольное уточнение [`04-solution-strategy.md` §4.3](04-solution-strategy.md#43-протоколы--микс): синхронных многошаговых команд нет, отдельный RPC-слой не нужен. Сеть внутри кластера не доверенная — тот же аргумент, что в Bookly, без смены стиля взаимодействия |

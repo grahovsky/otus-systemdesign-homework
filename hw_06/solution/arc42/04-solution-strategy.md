@@ -46,14 +46,16 @@ API (доступ владельца приложения) разная моде
 | Mobile App + SDK → Ingest API | **HTTPS REST** | Батч событий, gzip; клиент — мобильный SDK, не внутренний сервис |
 | Mobile App + SDK → App & Config Service | **HTTPS REST** | Разовый pull конфига при старте сессии, не sync-цепочка команд |
 | Владелец приложения → App & Config / Query API | **HTTPS REST** | Публичный CRUD/аналитические запросы, без внутреннего RPC-контракта |
-| Ingest API → App & Config Service | **HTTPS REST** | Fallback при промахе Redis: ключ, схема события, sampling. Не hot path при попадании в кэш |
+| Ingest API → App & Config Service | **HTTPS REST + mTLS** | Fallback при промахе Redis: ключ, схема события, sampling. Не hot path при попадании в кэш. mTLS — сеть внутри кластера не доверенная ([`../security.md`](../security.md)) |
 | Ingest API → Storage Writer | **Kafka** (`events.raw`) | Развязка пиков записи, буфер на случай простоя writer'а, at-least-once. Ключ партиции — `app_id` по тому же directory, что шард ClickHouse ([`../data-storage.md` §3, §5](../data-storage.md)) |
 | Storage Writer → ClickHouse | **Native protocol, batch insert** | Батч, а не построчный INSERT — см. §4.1 |
-| Query API → App & Config Service | **HTTPS REST** | Редкие запросы за определениями воронки, не hot path |
+| Query API → App & Config Service | **HTTPS REST + mTLS** | Редкие запросы за определениями воронки, не hot path. То же транспортное доверие, что на Ingest → App & Config |
 
 Отдельного internal gRPC-слоя (как в Bookly) нет: между сервисами нет синхронных
 многошаговых команд с ответом — каждый переход либо однонаправленный HTTP-запрос, либо
-асинхронное событие.
+асинхронное событие. Доверие между сервисами закрывается mTLS и короткоживущим service
+identity на уже существующих HTTP-рёбрах, а не отдельным RPC-слоем
+([`../security.md`](../security.md)).
 
 ## 4.4 Асинхронность — где и зачем
 
