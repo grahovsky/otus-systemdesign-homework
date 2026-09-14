@@ -3,6 +3,7 @@
 > Часть [решения ДЗ 6](README.md). Система: сервис телеметрии мобильных приложений
 > (контейнеры — [`architecture/`](architecture/), нагрузка — [`sizing.md`](sizing.md),
 > пороги — [`observability.md`](observability.md), механизмы — [`reliability.md`](reliability.md)).
+> Схема точек отказа — [`diagrams/chaos-faults.puml`](diagrams/chaos-faults.puml).
 
 ## 1. План нагрузочного тестирования
 
@@ -71,7 +72,8 @@ stale-кэш против деградации App & Config
 ([`reliability.md` §1](reliability.md#1-rto--rpo-по-сервисам),
 [`data-storage.md` §5](data-storage.md#5-очереди--асинхронность-на-хранении)).
 
-Точки отказа на пути записи: три разных компонента, не три kill одного инстанса. Региональный DR сюда не входит: он
+Точки отказа на пути записи — [`diagrams/chaos-faults.puml`](diagrams/chaos-faults.puml):
+три разных компонента, не три kill одного инстанса. Региональный DR сюда не входит: он
 закрывается game day из [`reliability.md` §4](reliability.md#4-план-dr).
 
 ```

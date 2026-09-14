@@ -1,0 +1,63 @@
+@startuml chaos-faults
+title Telemetry — точки отказа chaos-экспериментов (три разных механизма)
+
+left to right direction
+skinparam defaultFontSize 12
+skinparam componentStyle rectangle
+
+actor "Mobile App + SDK" as sdk
+
+component "Ingest API" as ingest
+component "Redis\nключ / дедуп / rate-limit" as redis
+component "App & Config\n(fallback при промахе кэша)" as cfg
+queue "Kafka events.raw\nRF=3, acks=all\nretention 12 ч" as kafka
+
+component "Storage Writer\nшард 0" as w0
+component "Storage Writer\nшард 1" as w1
+
+database "ClickHouse shard 0\nреплика A" as ch0a
+database "ClickHouse shard 0\nреплика B" as ch0b
+database "ClickHouse shard 1\n2 реплики" as ch1
+
+sdk --> ingest : POST /v1/events
+ingest --> redis
+ingest --> kafka : produce → 202
+ingest ..> cfg : fallback (не hot path)
+
+kafka --> w0
+kafka --> w1
+w0 --> ch0a : INSERT quorum=2
+w0 --> ch0b
+w1 --> ch1
+
+note bottom of ch0a
+  **Эксп. 1 — реплика шарда CH**
+  insert_quorum=2: ACK вставки
+  останавливается. Ingest жив (202).
+  Writer → retry, не DLT.
+  Query читает с живой реплики B.
+end note
+
+note bottom of cfg
+  **Эксп. 2 — App & Config**
+  breaker + stale-кэш (ADR-0005):
+  известные app_id принимаются,
+  новые — fail-closed.
+  Пул Kafka producer не трогаем.
+end note
+
+note bottom of w0
+  **Эксп. 3 — N−1 Writer**
+  партиции шарда 0 отстают;
+  шард 1 продолжает flush.
+  После возврата: lag → 0,
+  count без дублей (ADR-0002).
+end note
+
+note top of ingest
+  Blast radius: staging, по одному
+  компоненту. DR региона — game day
+  в reliability.md §4, не здесь.
+end note
+
+@enduml
