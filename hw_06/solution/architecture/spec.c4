@@ -1,6 +1,5 @@
 // spec.c4 — kinds, relationships, tags, colors
 // Совместимо с likec4 >= 1.39 (всё внутри specification).
-// Копия из hw_02/solution/architecture/spec.c4 — тот же набор kinds/tags достаточен и здесь.
 
 specification {
   color person          #08427B
@@ -41,6 +40,7 @@ specification {
   relationship queries
   relationship mutates
   relationship authenticates
+  relationship notifies
 
   tag external {
     color #999999

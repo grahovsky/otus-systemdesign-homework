@@ -5,7 +5,8 @@ model {
     description 'Сервис телеметрии мобильных приложений: приём батчей событий от SDK,
 хранение сырых событий и расчёт воронок, retention, DAU/MAU.
 Минимальный рабочий контур: регистрация приложения → SDK получает конфиг →
-приём событий → хранение → аналитика.'
+приём событий → хранение → аналитика. Класс — Product / Behavioral analytics
+(ориентир Amplitude), не APM.'
 
     ingest = container 'Ingest API' {
       description 'Приём батчей событий от SDK: HTTPS REST, gzip, валидация схемы события,
@@ -17,7 +18,9 @@ geo/device — по offline-базе (не внешний вызов). Публ�
     app_config = container 'App & Config Service' {
       description 'Три обязанности на общих CRUD-метаданных в Postgres: регистрация
 приложений и API-ключей; per-app определения воронок/метрик; sampling rate и feature flags
-для SDK. Один сервис, а не три — объём и владелец-актор (владелец приложения) общие.'
+для SDK. Плюс CRUD `alert_rules` (порог на definition + webhookUrl) — та же таблица
+метаданных, не отдельный сервис. Один сервис, а не несколько: объём и владелец-актор
+(владелец приложения) общие.'
     }
 
     storage_writer = container 'Storage Writer' {
@@ -28,7 +31,8 @@ geo/device — по offline-базе (не внешний вызов). Публ�
     query_api = container 'Query API' {
       description 'Аналитика по зарегистрированным приложениям: funnel conversion, retention
 curve, DAU/MAU, разбивка по сегментам. Читает сырые события ClickHouse и определения воронок/
-метрик из App & Config Service. Latency p95 < 2 с.'
+метрик из App & Config Service. Latency p95 < 2 с. Периодически проверяет alert-правила
+тем же путём чтения и при срабатывании отправляет HMAC-webhook владельцу (не BI-платформа).'
     }
 
     kafka = container 'Kafka' {
@@ -54,7 +58,8 @@ at-least-once, держит запас на несколько часов про
     postgres = container 'PostgreSQL' {
       #data
       description 'Метаданные App & Config Service: приложения, API-ключи, определения
-воронок/метрик, sampling/feature flags. Малый объём, нужен ACID.'
+воронок/метрик, sampling/feature flags, `alert_rules` (`app_id`, `definition_id`,
+условие, `webhook_url`). Малый объём, нужен ACID.'
       style {
         shape storage
       }

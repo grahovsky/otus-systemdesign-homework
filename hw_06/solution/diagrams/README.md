@@ -18,7 +18,3 @@
 | `chaos-faults.puml` | [9. Тестирование](../testing.md) | точки отказа трёх chaos-экспериментов на пути записи |
 
 Рендер: `plantuml diagrams/*.puml` или расширение PlantUML в IDE.
-
-> **Черновые заметки (убрать перед сдачей):** аналогичные `diagrams/` — в
-> [ДЗ 3](../../hw_03/solution/diagrams/) / [ДЗ 4](../../hw_04/solution/diagrams/) /
-> [ДЗ 5](../../hw_05/solution/diagrams/).

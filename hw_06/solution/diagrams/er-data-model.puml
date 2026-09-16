@@ -47,9 +47,23 @@ package "PostgreSQL (App & Config)" as pkg_pg {
     * updated_at : timestamptz
   }
 
+  entity "alert_rules" as alerts {
+    * alert_id : text <<PK>>
+    --
+    * app_id : text <<FK>>
+    * definition_id : text
+    * definition_type : enum funnel|metric
+    * condition : jsonb
+    * webhook_url : text
+    * webhook_secret_ref : text
+    * cooldown_until : timestamptz
+    * updated_at : timestamptz
+  }
+
   apps ||--o{ api_keys
   apps ||--o{ funnels
   apps ||--o{ metrics
+  apps ||--o{ alerts
 }
 
 package "ClickHouse (SoT событий)" as pkg_ch {
