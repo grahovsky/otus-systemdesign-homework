@@ -9,7 +9,7 @@
 Ingest API держит cache-aside кэш API-ключа/схемы события/sampling в Redis с TTL 5 мин
 ([`../../data-storage.md` §4](../../data-storage.md#4-кэширование)). При промахе кэша Ingest
 синхронно ходит в App & Config (PostgreSQL) — это часть бюджета p99 < 300 мс
-([`../../requirements.md` §1.2`](../../requirements.md#12-нефункциональные-требования)).
+([`../../requirements.md` §1.2](../../requirements.md#12-нефункциональные-требования)).
 
 App & Config отнесён к Tier 1 в [`../../reliability.md` §1](../../reliability.md#1-rto--rpo-по-сервисам):
 его простой не теряет уже принятые события и допускает RTO 10 мин (локально) / 30 мин (DR).
