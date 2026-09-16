@@ -95,5 +95,6 @@ X-Request-Id: 8f14e45f-...
 
 ## Internal
 
-Query API читает funnel/metric definitions из `App & Config Service` (HTTPS REST, не hot
-path) и данные — из ClickHouse (Native protocol).
+Query API читает funnel/metric definitions и alert-правила из `App & Config Service`
+(HTTPS REST, не hot path) и данные — из ClickHouse (Native protocol). Периодическая
+проверка алертов — тот же read-path по расписанию ([`alerts.md`](alerts.md)).

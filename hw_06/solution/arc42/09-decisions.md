@@ -11,10 +11,11 @@
 | [ADR-0003](adr/0003-query-time-vs-pre-aggregation.md) | Query-time агрегация vs pre-aggregation | Accepted | На MVP — query-time расчёт по сырым событиям ClickHouse; отдельные materialized views под DAU/MAU (retention 2 года), без pre-aggregation под каждый из 4 query-эндпоинтов |
 | [ADR-0004](adr/0004-shard-by-app-id.md) | Шардирование ClickHouse по `app_id` | Accepted | Шард-ключ — `app_id`, не `hash(user_id)`: funnel/retention/сегменты всегда фильтруют по одному `appId`; hotspot-приложение остаётся точечной эскалацией, не меняет ключ для всех |
 | [ADR-0005](adr/0005-ingest-config-degraded-mode.md) | Деградация Ingest при недоступности App & Config | Accepted | При промахе кэша и недоступном App & Config Ingest обслуживает запрос из просроченного кэша до 30 мин (fail-open, ограниченный по времени), не отклоняет батч сразу (fail-closed) — иначе Tier 1-сбой App & Config эскалирует в Tier 0-потерю событий (см. [`../reliability.md` §3](../reliability.md#3-паттерны-отказоустойчивости)) |
+| [ADR-0006](adr/0006-threshold-alerts-webhook.md) | Пороговый алерт vs BI-платформа / отдельный сервис | Accepted | Правило на funnel/metric definition, периодический пересчёт тем же путём Query API, доставка HMAC-webhook. Полноценные дашборды и ML — backlog; отдельный Alert Service не даёт изоляции, которой нет у синхронного запроса тех же definitions |
 
 ## Кандидаты (закрыты в security.md, без отдельного ADR)
 
-Развилки ниже не тянут на ADR уровня 0001–0005: одна закрыта отсутствием контейнера в C2,
+Развилки ниже не тянут на ADR уровня 0001–0006: одна закрыта отсутствием контейнера в C2,
 вторая — уточнение транспорта на уже выбранных HTTP-рёбрах.
 
 | Тема | Решение | Почему не ADR |

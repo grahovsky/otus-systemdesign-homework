@@ -12,7 +12,7 @@
 
 | Актор / система | Роль |
 |---|---|
-| Владелец приложения (person) | Регистрирует приложение и API-ключи, настраивает funnel/metric definitions и sampling, читает аналитику |
+| Владелец приложения (person) | Регистрирует приложение и API-ключи, настраивает funnel/metric definitions, sampling и пороговые алерты, читает аналитику, принимает webhook |
 | Mobile App + SDK (external system) | Технический источник событий: батчит и отправляет события, тянет конфиг sampling/feature flags |
 
 ## Level 2 — Containers (C2)
@@ -27,12 +27,12 @@
 | Контейнер | Роль |
 |---|---|
 | Ingest API | Приём батчей событий от SDK (HTTPS REST, gzip), валидация схемы, идемпотентность по `event_id`, rate-limit per-app, geo/device offline-lookup. Публикует в Kafka, в ClickHouse не пишет |
-| App & Config Service | Регистрация приложений/API-ключей, per-app определения воронок/метрик, sampling rate и feature flags для SDK |
+| App & Config Service | Регистрация приложений/API-ключей, per-app определения воронок/метрик, правила пороговых алертов, sampling rate и feature flags для SDK |
 | Storage Writer | Консьюмер Kafka → батчевая идемпотентная вставка в ClickHouse |
-| Query API | Funnel conversion, retention, DAU/MAU, сегменты — query-time по сырым событиям ClickHouse |
+| Query API | Funnel conversion, retention, DAU/MAU, сегменты — query-time по сырым событиям ClickHouse; периодическая проверка alert-правил и HMAC-webhook владельцу |
 | Kafka (`events.raw`) | Буфер между Ingest API и Storage Writer, сглаживает пики записи, at-least-once |
 | ClickHouse | SoT сырых событий (TTL 90 дней) + материализованные представления DAU/MAU (retention 2 года) |
-| PostgreSQL | Метаданные App & Config Service: приложения, API-ключи, определения воронок/метрик, sampling/feature flags |
+| PostgreSQL | Метаданные App & Config Service: приложения, API-ключи, определения воронок/метрик, sampling/feature flags, `alert_rules` |
 | Redis | Кэш API-ключей/конфига на hot path Ingest API, дедуп-окно `event_id`, счётчики rate-limit |
 
 ## Как посмотреть

@@ -71,17 +71,11 @@ funnel — без backfill, т.к. расчёт query-time ([ADR-0003](../arc42/
 Тот же CRUD-паттерн, что у funnel: `POST/GET/PUT/DELETE /v1/apps/{appId}/definitions/metric[/{definitionId}]`,
 тело — `name` + `spec` (JSON: событие-метрика и опционально числовой атрибут для агрегации,
 например `{"event": "purchase", "aggregate": "sum", "property": "amount"}`).
-
-> **Незакрытый вопрос (для ревью перед сдачей):** ни один из четырёх эндпоинтов
-> [`analytics-query.md`](analytics-query.md) сегодня не принимает `metricDefinitionId` —
-> funnel, retention и DAU/MAU негибкие по определению метрики, а `segments` группирует
-> фиксированный набор атрибутов (`platform`/`appVersion`/`country`), не произвольную
-> `metric_definitions.spec`. CRUD здесь описан симметрично модели данных
-> ([`../data-storage.md` §1](../data-storage.md#1-модель-данных)), но фактического
-> потребителя этих definitions в Query API нет. Решить: либо убрать `metric_definitions`
-> из модели данных как избыточную сущность (funnel + `eventSchema` уже закрывают
-> [`requirements.md` §1.1.3](../requirements.md#11-функциональные-требования-scope)), либо
-> явно завести пятый query-эндпоинт под произвольную метрику.
+Потребитель `metric_definitions` в Query API — пороговый алерт
+([`alerts.md`](alerts.md)): правило ссылается на `metricDefinitionId` (или на воронку),
+а не отдельный пятый analytics-эндпоинт. Четыре query-эндпоинта из §1.1 остаются
+фиксированными; произвольная метрика считается только при проверке правила
+([ADR-0006](../arc42/adr/0006-threshold-alerts-webhook.md)).
 
 ## Ошибки (общие)
 

@@ -6,7 +6,7 @@
 и разные клиенты (см. [`../architecture/`](../architecture/) и
 [`../arc42/04-solution-strategy.md` §4.2](../arc42/04-solution-strategy.md#42-декомпозиция-сервисов)).
 
-5 ключевых контрактов, по одному файлу на каждый:
+6 ключевых контрактов, по одному файлу на каждый:
 
 | # | API | Протокол | Файл |
 |---|---|---|---|
@@ -15,6 +15,7 @@
 | 3 | Регистрация приложения и API-ключей | REST | [`app-registration.md`](app-registration.md) |
 | 4 | Аналитика: funnel / retention / DAU-MAU / сегменты | REST | [`analytics-query.md`](analytics-query.md) |
 | 5 | CRUD funnel/metric definitions | REST | [`definitions.md`](definitions.md) |
+| 6 | Пороговые алерты (webhook) | REST | [`alerts.md`](alerts.md) |
 
 Заголовки Ingest API (клиент — мобильный SDK):
 
@@ -29,5 +30,5 @@
 | Header | Обязателен | Описание |
 |---|---|---|
 | `Authorization: Bearer <jwt>` | да | токен доступа владельца приложения |
-| `Idempotency-Key` | для мутаций (регистрация ключей, definitions) | UUID |
+| `Idempotency-Key` | для мутаций (регистрация ключей, definitions, alerts) | UUID |
 | `X-Request-Id` | рекомендуется | корреляция логов/трейсов |

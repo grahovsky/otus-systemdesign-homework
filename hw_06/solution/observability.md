@@ -199,7 +199,7 @@ Severity:        warning
 | Ingest API | route, status, latency, `batch_id`, `accepted`/`duplicates`/`rejected`, cache hit / stale (ADR-0005), hash ключа — не plaintext |
 | Storage Writer | размер батча (событий), шард `app_id`, длительность INSERT, исход: success / retry / DLT |
 | Query API | эндпоинт, `appId`, bytes scanned / elapsed; без строк результата и без JWT |
-| **Аудит** (отдельный поток, дольше TTL обычных логов) | ротация/отзыв API-ключа и смена `event_schema` / definitions — кто/когда/какой `app_id`; нужно для разбора «почему батч стал 422» и окна revoke 5–30 мин |
+| **Аудит** (отдельный поток, дольше TTL обычных логов) | ротация/отзыв API-ключа, смена `event_schema` / definitions / alert-правил, исходящий webhook (alertId, status, без секрета и без тела) — кто/когда/какой `app_id`; нужно для разбора «почему батч стал 422», окна revoke 5–30 мин и повторных срабатываний алерта |
 
 **Трейсы.** Синхронный путь одним trace: Ingest → Redis (lookup ключа, дедуп, rate-limit) →
 produce в Kafka. Контекст (W3C `traceparent`) кладётся в заголовки сообщения `events.raw`.

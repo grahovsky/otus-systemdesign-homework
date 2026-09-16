@@ -36,12 +36,12 @@ architecture/
 | Контейнер | Ответственность |
 |---|---|
 | **Ingest API** | Приём батчей событий от SDK: валидация схемы, gzip, идемпотентность по `event_id`, rate-limit per-app, geo/device offline |
-| **App & Config Service** | Регистрация приложений/API-ключей, per-app funnel/metric definitions, sampling/feature flags для SDK |
+| **App & Config Service** | Регистрация приложений/API-ключей, per-app funnel/metric definitions, `alert_rules`, sampling/feature flags для SDK |
 | **Storage Writer** | Консьюмер Kafka → батчевая вставка в ClickHouse |
-| **Query API** | Funnel conversion, retention, DAU/MAU, сегменты |
+| **Query API** | Funnel conversion, retention, DAU/MAU, сегменты; периодическая проверка alert-правил и HMAC-webhook |
 | **Kafka** | Буфер `events.raw` между Ingest API и Storage Writer |
 | **ClickHouse** | SoT сырых событий |
-| **PostgreSQL** | Метаданные App & Config Service |
+| **PostgreSQL** | Метаданные App & Config Service (включая `alert_rules`) |
 | **Redis** | Кэш API-ключей/конфига на hot path Ingest API, дедуп-окно `event_id`, счётчики rate-limit per-app |
 
 ## Как посмотреть
