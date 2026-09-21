@@ -29,8 +29,20 @@ platform out of scope.
 срабатывании делает HTTPS POST.
 
 CRUD правил — в App & Config, таблица `alert_rules` в PostgreSQL рядом с definitions.
+Рядом же, не в памяти Query API, лежат `alert_state` (последняя проверка, последнее
+срабатывание, cooldown, статус webhook) и одна строка `alert_scheduler_lease`.
 Отдельный сервис не заводится: это тот же read-path Query API, запущенный по таймеру,
-а не новый контур хранения или новый класс запросов.
+а не новый контур хранения или новый класс запросов. Своей БД у Query API нет:
+lease и состояние он меняет internal-вызовом App & Config.
+
+Query API — два инстанса без своего состояния. Тик проверки выполняет тот, кто
+захватил lease: `UPDATE alert_scheduler_lease SET holder = $1, leased_until = now() +
+interval WHERE leased_until < now()`. Второй инстанс получает 0 строк и тик пропускает.
+Перед HTTPS POST — условный `UPDATE alert_state SET cooldown_until = now() + cooldown
+WHERE alert_id = $1 AND (cooldown_until IS NULL OR cooldown_until < now())`. 0 строк —
+webhook не отправляем. Это закрывает гонку, если lease истёк посередине тика и его
+уже взял другой инстанс: оба могли посчитать одно и то же нарушение, доставку делает
+один.
 
 Доставка — webhook с HMAC-подписью (`X-Telemetry-Signature`), retry с backoff;
 секрет подписи не пишется в логи ([`../../security.md`](../../security.md)).
@@ -57,6 +69,10 @@ CRUD правил — в App & Config, таблица `alert_rules` в PostgreSQ
 - Бурст срабатываний на массовой просадке (много приложений сразу) давит исходящий
   HTTP Query API. Митигация: per-rule cooldown и отдельный пул исходящих соединений
   (тот же bulkhead, что на Ingest, только в обратную сторону).
+- Два инстанса Query API без общего состояния оба отправили бы webhook на одно
+  срабатывание: правилу нужны `last_fired_at` и cooldown, а их нет в памяти инстанса.
+  Митигация — `alert_state` и захват `alert_scheduler_lease` в Postgres App & Config;
+  условный UPDATE cooldown отсекает повторный POST на границе lease.
 
 ## Alternatives considered
 

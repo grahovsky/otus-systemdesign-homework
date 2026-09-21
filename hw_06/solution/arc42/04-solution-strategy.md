@@ -52,7 +52,7 @@ API (доступ владельца приложения) разная моде
 | Ingest API → App & Config Service | **HTTPS REST + mTLS** | Fallback при промахе Redis: ключ, схема события, sampling. Не hot path при попадании в кэш. mTLS — сеть внутри кластера не доверенная ([`../security.md`](../security.md)) |
 | Ingest API → Storage Writer | **Kafka** (`events.raw`) | Развязка пиков записи, буфер на случай простоя writer'а, at-least-once. Ключ партиции — `app_id` по тому же directory, что шард ClickHouse ([`../data-storage.md` §3, §5](../data-storage.md)) |
 | Storage Writer → ClickHouse | **Native protocol, batch insert** | Батч, а не построчный INSERT — см. §4.1 |
-| Query API → App & Config Service | **HTTPS REST + mTLS** | Редкие запросы за определениями воронки и alert-правилами, не hot path. То же транспортное доверие, что на Ingest → App & Config |
+| Query API → App & Config Service | **HTTPS REST + mTLS** | Определения воронки, alert-правила, захват `alert_scheduler_lease` и условный UPDATE `alert_state`. Не hot path. То же транспортное доверие, что на Ingest → App & Config ([ADR-0006](adr/0006-threshold-alerts-webhook.md)) |
 | Query API → webhook владельца | **HTTPS POST** | Срабатывание порогового правила; HMAC `X-Telemetry-Signature`. Не внутренний RPC ([ADR-0006](adr/0006-threshold-alerts-webhook.md)) |
 
 Отдельного internal gRPC-слоя (как в Bookly) нет: между сервисами нет синхронных

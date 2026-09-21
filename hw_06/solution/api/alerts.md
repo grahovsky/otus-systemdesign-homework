@@ -7,7 +7,8 @@ metric definition и `webhookUrl`. Query API периодически перес
 [`../requirements.md` §1.1.6](../requirements.md#11-функциональные-требования-scope)).
 Не BI и не anomaly detection: только явный порог.
 
-Хранятся в PostgreSQL App & Config Service, таблица `alert_rules`
+Хранятся в PostgreSQL App & Config Service: `alert_rules` — конфигурация владельца,
+`alert_state` и `alert_scheduler_lease` — runtime проверки
 ([`../data-storage.md` §1](../data-storage.md#1-модель-данных)).
 
 ## Общие заголовки (мутации)
@@ -117,11 +118,14 @@ X-Request-Id: 8f14e45f-...
 
 Подпись — HMAC-SHA256 тела на секрете правила (`X-Telemetry-Signature`).
 Retry с exponential backoff, ограниченный бюджет; после исчерпания — запись
-в аудит, правило не удаляется. Cooldown per-rule (по умолчанию = `windowHours`)
-не даёт повторный POST на ту же просадку. Доставка at-least-once: получатель
+в аудит и `last_webhook_status` в `alert_state`, правило не удаляется. Cooldown
+per-rule (по умолчанию = `windowHours`) не даёт повторный POST на ту же просадку:
+перед отправкой Query API делает условный UPDATE `cooldown_until` в `alert_state`,
+и при 0 затронутых строк POST не выполняется. Доставка at-least-once: получатель
 идемпотентен по `(alertId, firedAt)`.
 
-Расписание проверки — раз в 15 мин. Это не SLO ingest и не p95 Query API:
+Расписание проверки — раз в 15 мин, и только на инстансе, захватившем
+`alert_scheduler_lease` (см. Internal). Это не SLO ingest и не p95 Query API:
 алерт — лучшее усилие с горизонтом минуты, согласованным с аналитикой часы/дни.
 
 ## Ошибки
@@ -137,8 +141,20 @@ Retry с exponential backoff, ограниченный бюджет; после 
 
 ## Internal
 
-`App & Config Service` читает/пишет `alert_rules` в PostgreSQL; валидация — сверка
-`definition_id` с `funnel_definitions` / `metric_definitions` того же `appId`.
-Query API забирает активные правила (HTTPS REST + mTLS), считает окно/baseline
-в ClickHouse тем же путём, что [`analytics-query.md`](analytics-query.md), и
-отправляет webhook. Своей БД у Query API по-прежнему нет.
+`App & Config Service` читает/пишет `alert_rules`, `alert_state` и одну строку
+`alert_scheduler_lease` в PostgreSQL. Валидация правила — сверка `definition_id`
+с `funnel_definitions` / `metric_definitions` того же `appId`.
+
+`alert_state` — строка на правило: `last_checked_at`, `last_fired_at`,
+`cooldown_until`, `last_webhook_status`. Это не конфигурация владельца и не память
+инстанса Query API.
+
+Проверку запускает Query API. Оба инстанса в начале тика зовут App & Config
+(HTTPS REST + mTLS): `UPDATE alert_scheduler_lease SET holder, leased_until = now() +
+interval WHERE leased_until < now()`. Ответ «захвачено» получает один; второй тик
+пропускает. Держатель забирает активные правила, считает окно/baseline в ClickHouse
+тем же путём, что [`analytics-query.md`](analytics-query.md), пишет `last_checked_at`.
+При нарушении порога — условный `UPDATE alert_state SET cooldown_until ... WHERE
+cooldown_until IS NULL OR cooldown_until < now()`; 1 строка → HTTPS POST webhook,
+0 строк → POST не шлём (cooldown ещё действует, либо второй инстанс успел захватить
+доставку на границе lease). Своей БД у Query API по-прежнему нет.

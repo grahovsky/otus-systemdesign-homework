@@ -56,14 +56,34 @@ package "PostgreSQL (App & Config)" as pkg_pg {
     * condition : jsonb
     * webhook_url : text
     * webhook_secret_ref : text
-    * cooldown_until : timestamptz
     * updated_at : timestamptz
+  }
+
+  entity "alert_state" as alert_state {
+    * alert_id : text <<PK, FK>>
+    --
+    last_checked_at : timestamptz
+    last_fired_at : timestamptz
+    cooldown_until : timestamptz
+    last_webhook_status : text
+    ==
+    runtime, не конфигурация владельца
+  }
+
+  entity "alert_scheduler_lease" as alert_lease {
+    * id : int <<PK>>
+    --
+    holder : text
+    leased_until : timestamptz
+    ==
+    одна строка на кластер
   }
 
   apps ||--o{ api_keys
   apps ||--o{ funnels
   apps ||--o{ metrics
   apps ||--o{ alerts
+  alerts ||--|| alert_state
 }
 
 package "ClickHouse (SoT событий)" as pkg_ch {

@@ -8,11 +8,11 @@
 
 | Сервис | Хранилище | Что хранит |
 |---|---|---|
-| App & Config | PostgreSQL | `apps` (схема события, sampling, feature flags), `api_keys`, `funnel_definitions`, `metric_definitions`, `alert_rules` |
+| App & Config | PostgreSQL | `apps` (схема события, sampling, feature flags), `api_keys`, `funnel_definitions`, `metric_definitions`, `alert_rules`, `alert_state` (проверка и cooldown), `alert_scheduler_lease` (одна строка) |
 | Storage Writer / Query API | ClickHouse | `events` — сырые события, TTL 90 дней, **SoT**; `mv_dau_mau` — HLL-агрегат DAU/MAU, retention 2 года |
 | Ingest API | Redis | кэш API-ключа и схемы; окно дедупа `event_id`; счётчики rate-limit per-app. **Не SoT** |
 | Ingest API → Storage Writer | Kafka `events.raw` | буфер принятых батчей (retention 12 ч, RF = 3). **Не долгосрочное хранилище** |
-| Query API | — | своей БД нет; читает ClickHouse и определения из App & Config |
+| Query API | — | своей БД нет; читает ClickHouse и определения из App & Config; `alert_state` и lease меняет только через App & Config |
 | Storage Writer | — | своей БД нет; пишет только в ClickHouse |
 
 Инварианты:
@@ -29,7 +29,7 @@
 
 | Сервис | Что хранит | Форма данных | Ключевые запросы | Выбранная БД | Почему |
 |---|---|---|---|---|---|
-| App & Config | приложения, ключи, definitions, alert_rules | реляционная, малый объём (~40 МБ) | CRUD владельца, lookup ключа/схемы, чтение funnel definition и правил алерта | **PostgreSQL** | уникальность имени у владельца, ACID на создании приложения и ключа в одной транзакции ([`api/app-registration.md`](api/app-registration.md)); 2 000 строк — не повод для отдельного класса СУБД |
+| App & Config | приложения, ключи, definitions, `alert_rules`, `alert_state`, lease планировщика | реляционная, малый объём (~40 МБ) | CRUD владельца, lookup ключа/схемы, чтение funnel definition и правил алерта, условный UPDATE cooldown и захват lease | **PostgreSQL** | уникальность имени у владельца, ACID на создании приложения и ключа в одной транзакции ([`api/app-registration.md`](api/app-registration.md)); условный UPDATE `alert_state` атомарен между двумя инстансами Query API ([ADR-0006](arc42/adr/0006-threshold-alerts-webhook.md)); 2 000 строк — не повод для отдельного класса СУБД |
 | Storage Writer / Query API | сырые события + DAU/MAU | колоночные факты, append-only | INSERT батчами ~22 тыс. строк; funnel/retention/сегменты — скан по одному `app_id` за дни/недели; DAU/MAU — чтение MV | **ClickHouse** | колоночное сжатие ×8 и скан среднего приложения (0.9 ГБ / 90 дней) в бюджете p95 < 2 с ([`sizing.md` §2, §5](sizing.md)); MergeTree рассчитан на батч-INSERT, не на точечный UPDATE |
 | Ingest API (hot path) | кэш, дедуп, лимиты | key-value + TTL | GET ключа, SET `event_id`, INCR лимита | **Redis** | p99 ingest < 300 мс не допускает синхронный Postgres на каждый батч; TTL-семантика окна дедупа и счётчика — нативная |
 | Ingest → Writer | принятые батчи | лог сообщений | produce / consume, replay при простое writer | **Kafka** | буфер на часы простоя writer, at-least-once, развязка p99 ingest от OLAP-вставки ([ADR-0001](arc42/adr/0001-batch-insert-clickhouse.md)) |
