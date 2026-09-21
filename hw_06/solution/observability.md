@@ -26,7 +26,7 @@ Writer и Query API; USE — на Kafka, ClickHouse и Redis под ними; б
 | 3 | Ingest API | RED Duration | p50 / p95 / **p99** ответа `POST /v1/events` | histogram, SLO p99 < 300 мс | хвост, который видит SDK; среднее его прячет. p99 выше SLO — SDK уходит в ретраи и усиливает нагрузку; смотреть produce в Kafka vs Redis vs fallback App & Config |
 | 4 | Storage Writer | RED Rate | событий INSERT/с в ClickHouse | counter строк успешного батча | расхождение с #1 — батчи лежат в `events.raw`, ещё не в SoT. Если Writer жив, но rate ниже ingest — смотреть lag (#8) и parts (#10), не масштабировать Ingest |
 | 5 | Storage Writer | RED Errors | transient retry vs **DLT** отдельно | counter по топику `events.raw.storage-writer.retry` / `.dlt` | retry — ожидаемый backoff. DLT — принятый батч исчерпал попытки и не в SoT; разбор poison vs деградация ClickHouse, затем replay ([`data-storage.md` §5](data-storage.md#5-очереди--асинхронность-на-хранении)) |
-| 6 | Query API | RED Duration | p95 по эндпоинту (funnel / retention / segments / dau-mau) | histogram, SLO p95 < 2 с | G1. Рост на одном `appId` — hotspot-скан (~36 ГБ сжатых, ~7 с, [`sizing.md` §5](sizing.md#5-оптимизация)), не парк Query. Рост на всех — saturation ClickHouse (#10) |
+| 6 | Query API | RED Duration | p95 по эндпоинту (funnel / retention / segments / dau-mau) | histogram, SLO p95 < 2 с | G1. Рост на одном `appId` — чтение hotspot (колонки ~12 ГБ / ~2.4 с на 90 днях; ~7 с — верхняя граница всего ряда 36 ГБ, [`sizing.md` §5](sizing.md#5-оптимизация)), не парк Query. Рост на всех — saturation ClickHouse (#10) |
 | 7 | Query API | RED Errors | 5xx и таймауты; пустой результат — не ошибка | counter по status; «нет событий за период» — 200 | как отказ выдачи, а не «нет данных». 5xx — ClickHouse или App & Config (definitions); пустой ряд воронки — ожидаемое поведение |
 | 8 | Kafka `events.raw` | USE Saturation | consumer lag группы Storage Writer, сек | Kafka exporter, per partition | ведущий индикатор до потери: retention 12 ч — потолок, после которого принятое событие не восстановить ([`requirements.md` §1.3](requirements.md#13-риски-и-ограничения)). Растущий lag — масштабировать Writer / лечить INSERT, не ждать 12 ч |
 | 9 | Kafka DR | USE Saturation | лаг межкластерной репликации, сек | MirrorMaker 2 / Cluster Linking lag | фактический RPO при DR vs бюджет ≤ 5 мин ([`reliability.md` §1](reliability.md#1-rto--rpo-по-сервисам)). Рост — канал/CPU брокеров региона B, не ingest |
@@ -120,7 +120,8 @@ Severity:        warning
 Что означает:    владелец не получает воронку/retention в бюджете дашборда.
                  Не critical: Query — 99.5%, простой не теряет события
                  ([`reliability.md` §1](reliability.md#1-rto--rpo-по-сервисам))
-Вероятная причина: скан hotspot-приложения (2% потока, ~7 с на 36 ГБ,
+Вероятная причина: чтение hotspot-приложения (2% потока: колонки ~2.4 с
+                 на 90 днях, верхняя граница всего ряда ~7 с,
                  [`sizing.md` §5](sizing.md#5-оптимизация)) либо общее
                  насыщение шарда (parts #10)
 Реакция:         p95 в разбивке по `appId` → один клиент: sampling / точечная
