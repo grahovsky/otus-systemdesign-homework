@@ -20,7 +20,7 @@
 - **Единственный SoT событий — ClickHouse `events`.** HTTP 202 Ingest означает «батч в Kafka», не «строка в SoT» ([ADR-0001](arc42/adr/0001-batch-insert-clickhouse.md)).
 - Redis нигде не источник правды: промах или рестарт восстанавливаются из Postgres (ключ/схема) или повторной вставкой в ClickHouse (дедуп по `event_id`).
 - `app_id` в событиях — логическая ссылка на `apps.app_id`, без физического FK между PostgreSQL и ClickHouse.
-- Партиция сырых событий — по **времени приёма на сервере** (`received_at`), не по `event_time` устройства: clock skew ломает окна воронки и границы партиций ([`requirements.md` §1.3](requirements.md#13-риски-и-ограничения)).
+- Партиция сырых событий — `toYYYYMMDD(received_at)`, не по `event_time` устройства: clock skew не разъезжает границы партиций, TTL режется по времени приёма ([`requirements.md` §1.3](requirements.md#13-риски-и-ограничения)). Запрос funnel/retention фильтрует по `event_time`: partition pruning по бизнес-времени не работает, диапазон дат отсекает первичный ключ `(app_id, event_time)` по гранулам.
 - Произвольные properties в `events` не хранятся: набор атрибутов регистрируется в `apps.event_schema`, ingest отклоняет незаявленный ключ.
 
 ---
