@@ -16,6 +16,7 @@ rectangle "ClickHouse (events, mv_dau_mau) — шард N" as ch_block {
 
   database "Реплика A\n(AZ1)" as ch_r1
   database "Реплика B\n(AZ2)" as ch_r2
+  database "Реплика C\n(AZ3)" as ch_r3
 }
 
 component "Storage Writer" as writer
@@ -29,10 +30,13 @@ writer --> ch_lb : batch INSERT
 query --> ch_lb : SELECT funnel/retention/DAU-MAU
 ch_lb --> ch_r1
 ch_lb --> ch_r2
+ch_lb --> ch_r3
 
-ch_r1 <-r-> ch_r2 : insert_quorum=2\nACK обеих реплик → RPO ≈ 0
+ch_r1 <-r-> ch_r2 : insert_quorum=2\nACK двух из трёх → RPO ≈ 0
+ch_r2 <-r-> ch_r3
 keeper --> ch_r1 : регистрация вставленных\nparts, health-check
 keeper --> ch_r2 : регистрация вставленных\nparts, health-check
+keeper --> ch_r3 : регистрация вставленных\nparts, health-check
 
 ch_r1 ..> backup : снапшот раз в 6 ч
 

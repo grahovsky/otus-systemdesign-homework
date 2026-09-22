@@ -10,8 +10,8 @@ actor "Storage Writer" as writer
 
 rectangle "Directory app_id → шард\nбиннинг по суточному объёму\nне hash % N" as dir
 
-database "Shard 0\n2 реплики\nORDER BY (app_id, event_time)\nPARTITION received_at" as s0
-database "Shard 1\n2 реплики\nто же" as s1
+database "Shard 0\n3 реплики\nORDER BY (app_id, event_time)\nPARTITION received_at" as s0
+database "Shard 1\n3 реплики\nто же" as s1
 
 query --> dir : appId из пути запроса
 writer --> dir : app_id батча
@@ -21,7 +21,9 @@ dir --> s1
 note bottom of dir
   Запрос по одному appId —
   один шард, без scatter-gather.
-  Старт: 2 шарда × 2 реплики.
+  Старт: 2 шарда × 3 реплики.
+  insert_quorum=2: ребут одной ноды
+  запись шарда не останавливает.
   Kafka events.raw партиционируется
   тем же directory (см. queues.puml),
   чтобы writer шарда N не писал в оба шарда.

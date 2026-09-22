@@ -17,7 +17,8 @@ component "Storage Writer\nшард 1" as w1
 
 database "ClickHouse shard 0\nреплика A" as ch0a
 database "ClickHouse shard 0\nреплика B" as ch0b
-database "ClickHouse shard 1\n2 реплики" as ch1
+database "ClickHouse shard 0\nреплика C" as ch0c
+database "ClickHouse shard 1\n3 реплики" as ch1
 
 sdk --> ingest : POST /v1/events
 ingest --> redis
@@ -28,14 +29,17 @@ kafka --> w0
 kafka --> w1
 w0 --> ch0a : INSERT quorum=2
 w0 --> ch0b
+w0 --> ch0c
 w1 --> ch1
 
 note bottom of ch0a
-  **Эксп. 1 — реплика шарда CH**
-  insert_quorum=2: ACK вставки
-  останавливается. Ingest жив (202).
-  Writer → retry, не DLT.
-  Query читает с живой реплики B.
+  **Эксп. 1 — одна реплика шарда CH**
+  insert_quorum=2 при 3 репликах:
+  ACK не останавливается (живы B и C).
+  Ingest жив (202). DLT не растёт.
+  Query читает с живой реплики.
+  Если INSERT встал — кворум
+  фактически равен числу реплик.
 end note
 
 note bottom of cfg
