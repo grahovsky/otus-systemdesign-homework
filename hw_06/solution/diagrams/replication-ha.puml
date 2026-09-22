@@ -23,7 +23,7 @@ component "Storage Writer" as writer
 component "Query API" as query
 
 rectangle "Регион B — объектное хранилище (DR)" as backup_store {
-  storage "Бэкап ClickHouse\nкаждые 6 ч, retention < Kafka (12 ч)\nотдельный доступ, read-only" as backup
+  storage "Бэкап ClickHouse\nинкрементальный BACKUP, каждые 6 ч\nодна копия уникальных данных\nотдельный доступ, read-only" as backup
 }
 
 writer --> ch_lb : batch INSERT
@@ -38,7 +38,7 @@ keeper --> ch_r1 : регистрация вставленных\nparts, health-
 keeper --> ch_r2 : регистрация вставленных\nparts, health-check
 keeper --> ch_r3 : регистрация вставленных\nparts, health-check
 
-ch_r1 ..> backup : снапшот раз в 6 ч
+ch_r1 ..> backup : инкрементальный BACKUP\nраз в 6 ч, новые parts
 
 note bottom of backup
   Между регионами — не непрерывная
