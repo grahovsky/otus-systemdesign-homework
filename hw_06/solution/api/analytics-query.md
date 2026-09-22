@@ -73,14 +73,15 @@ X-Request-Id: 8f14e45f-...
   "groupBy": "platform",
   "date": "2026-09-01",
   "segments": [
-    { "value": "android", "count": 28000 },
-    { "value": "ios", "count": 13000 }
+    { "value": "android", "count": 41000 }
   ]
 }
 ```
 
-`groupBy` ограничен зарегистрированными атрибутами (`platform`, `appVersion`, `country`) —
-произвольная кардинальность здесь не поддерживается
+Приложение регистрируется с одной `platform` ([`app-registration.md`](app-registration.md)),
+поэтому разбивка по `platform` для этого `appId` — одно значение. Несколько значений
+дают `appVersion` и `country`. `groupBy` ограничен этими атрибутами — произвольная
+кардинальность здесь не поддерживается
 ([`requirements.md` §1.3](../requirements.md#13-риски-и-ограничения)).
 
 ## Ошибки (общие для всех 4 эндпоинтов)
