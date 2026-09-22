@@ -1,6 +1,6 @@
 # Схемы (PlantUML)
 
-> Часть [решения ДЗ 6](README.md). C1/C2 — не здесь, они в [`../architecture/`](../architecture/)
+> Часть [решения ДЗ 6](../README.md). C1/C2 — не здесь, они в [`../architecture/`](../architecture/)
 > (LikeC4). Здесь — остальные схемы, только `.puml` (в репозиторий попадают только `.puml`,
 > не сгенерированные `.svg`/`.png`).
 
@@ -9,7 +9,7 @@
 | `er-data-model.puml` | [4. Хранение данных](../data-storage.md) | сущности и связи |
 | `sharding.puml` | [4. Хранение данных](../data-storage.md) | ключ шардирования, распределение |
 | `caching-flow.puml` | [4. Хранение данных](../data-storage.md) | поток запроса через кэш |
-| `queues.puml` | [4. Хранение данных](../data-storage.md) | outbox / события между сервисами |
+| `queues.puml` | [4. Хранение данных](../data-storage.md) | Kafka `events.raw`: Ingest → Storage Writer, retry/DLT (outbox нет) |
 | `rps-fanout.puml` | [3. Сайзинг](../sizing.md) | откуда берутся запросы в сервисы (fan-out) |
 | `replication-ha.puml` | [6. Надёжность](../reliability.md) | data/control/routing plane репликации |
 | `dr-failover.puml` | [6. Надёжность](../reliability.md) | порядок переключения при DR |

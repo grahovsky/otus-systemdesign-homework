@@ -55,7 +55,7 @@ API (доступ владельца приложения) разная моде
 | Query API → App & Config Service | **HTTPS REST + mTLS** | Определения воронки, alert-правила, захват `alert_scheduler_lease` и условный UPDATE `alert_state`. Не hot path. То же транспортное доверие, что на Ingest → App & Config ([ADR-0006](adr/0006-threshold-alerts-webhook.md)) |
 | Query API → webhook владельца | **HTTPS POST** | Срабатывание порогового правила; HMAC `X-Telemetry-Signature`. Не внутренний RPC ([ADR-0006](adr/0006-threshold-alerts-webhook.md)) |
 
-Отдельного internal gRPC-слоя (как в Bookly) нет: между сервисами нет синхронных
+Отдельного internal gRPC-слоя нет: между сервисами нет синхронных
 многошаговых команд с ответом — каждый переход либо однонаправленный HTTP-запрос, либо
 асинхронное событие. Доверие между сервисами закрывается mTLS и короткоживущим service
 identity на уже существующих HTTP-рёбрах, а не отдельным RPC-слоем

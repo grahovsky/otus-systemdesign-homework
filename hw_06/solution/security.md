@@ -42,8 +42,7 @@
 **Авторизация владельца — не IDOR.** `appId` берётся из пути и сверяется с `owner_id` из
 `sub` токена, а не из тела запроса: иначе чужой `appId` в body позволил бы прочитать воронку
 или сменить ключи чужого приложения ([`api/analytics-query.md`](api/analytics-query.md),
-[`api/definitions.md`](api/definitions.md) — `403 FORBIDDEN`). Тот же принцип, что
-`guestProfileId` из токена, а не из body, в Bookly-аналоге.
+[`api/definitions.md`](api/definitions.md) — `403 FORBIDDEN`).
 
 **JWT выпускает внешний IdP, не контейнер продукта.** Identity в C2 нет и не добавляется:
 логин/пароль владельца — не часть цепочки «регистрация приложения → ingest → аналитика»,
@@ -54,7 +53,7 @@ App & Config и Query API проверяют токен локально по JW
 контура не зависит.
 
 **Вебхуки.** Inbound-вебхуков нет: нечего подписывать `X-Provider-Signature` и не от кого
-принимать чужой event id — в отличие от платёжного провайдера в Bookly-аналоге.
+принимать чужой event id.
 Исходящий webhook порогового алерта — обратное направление: Query API подписывает тело
 HMAC-SHA256 секретом правила (`X-Telemetry-Signature`). Секрет выдаётся владельцу один раз
 при создании/ротации (`X-Webhook-Secret`); в Postgres — только `webhook_url` и
