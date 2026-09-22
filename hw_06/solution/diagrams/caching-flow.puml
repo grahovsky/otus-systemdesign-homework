@@ -1,0 +1,53 @@
+@startuml caching-flow
+title Кэширование Ingest: cache-aside + TTL
+
+skinparam sequenceMessageAlign center
+
+actor "Mobile App + SDK" as SDK
+participant "Ingest API" as Ingest
+participant "Redis" as Redis
+participant "App & Config" as Config
+database "PostgreSQL" as PG
+
+== API-ключ и схема (TTL 5 мин) ==
+
+SDK -> Ingest : POST /v1/events (X-Api-Key)
+Ingest -> Redis : GET app:{key_hash}
+opt miss
+  Ingest -> Config : GET ключ / схема / sampling
+  Config -> PG : SELECT по key_hash
+  Config --> Ingest : app_id, schema, limits
+  Ingest -> Redis : SETEX app:{key_hash} 5min
+end
+note right of Ingest
+  Stale после revoke — до 5 мин (только TTL).
+  Невалидный ключ → 401, батч дальше не идёт.
+end note
+
+== Rate-limit per-app ==
+
+Ingest -> Redis : INCR rl:{app_id} + EXPIRE окна
+opt превышен лимит
+  Ingest --> SDK : 429 RATE_LIMITED
+end
+
+== Дедуп event_id (TTL 6 ч) ==
+
+Ingest -> Redis : SET NX event:{app_id}:{event_id} EX 6h\n(на каждый event_id батча)
+note right of Redis
+  Повтор внутри окна → duplicates++,
+  в Kafka не публикуем.
+  За пределами окна — второй барьер:
+  идемпотентный INSERT в ClickHouse.
+end note
+
+== SDK-конфиг (клиент, на сессию) ==
+
+SDK -> Config : GET /v1/sdk/config
+note over SDK, Config
+  Кэш на устройстве до конца сессии.
+  Query API **не** кэшируем:
+  ~3 RPS, query-time по definitions.
+end note
+
+@enduml

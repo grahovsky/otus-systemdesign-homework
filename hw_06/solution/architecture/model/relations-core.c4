@@ -1,0 +1,35 @@
+// relations-core.c4 — связи с протоколами на рёбрах
+
+model {
+  // === Actors → Telemetry ===
+  app_owner -[mutates]-> telemetry.app_config 'регистрация приложения, API-ключи, funnel/metric definitions, sampling, alert rules' 'HTTPS REST'
+  app_owner -[queries]-> telemetry.query_api 'funnel / retention / DAU-MAU / сегменты' 'HTTPS REST'
+  telemetry.query_api -[notifies]-> app_owner 'пороговый алерт (HMAC webhook)' 'HTTPS POST'
+
+  mobile_app -[publishes]-> telemetry.ingest 'batch events (gzip, API-key)' 'HTTPS REST'
+  mobile_app -[queries]-> telemetry.app_config 'fetch sdk config (sampling / feature flags)' 'HTTPS REST'
+
+  // === Ingest hot path ===
+  telemetry.ingest -[queries]-> telemetry.redis 'API-key / app config cache, dedup window, rate-limit' 'RESP'
+  telemetry.ingest -[queries]-> telemetry.app_config 'API-key / schema / sdk config on cache miss' 'HTTPS REST'
+  telemetry.ingest -[publishes]-> telemetry.kafka 'events.raw' 'Kafka'
+
+  // === Storage ===
+  telemetry.storage_writer -[subscribes]-> telemetry.kafka 'events.raw' 'Kafka'
+  telemetry.storage_writer -[mutates]-> telemetry.clickhouse 'batch insert (idempotent by event_id)' 'Native'
+
+  // === Query ===
+  telemetry.query_api -[queries]-> telemetry.clickhouse 'funnel / retention / DAU-MAU / сегменты' 'Native'
+  telemetry.query_api -[queries]-> telemetry.app_config 'funnel & metric definitions, alert rules' 'HTTPS REST'
+
+  // === Persistence ===
+  telemetry.app_config -[mutates]-> telemetry.postgres 'CRUD apps / keys / definitions / sdk config / alert_rules' 'SQL'
+
+  // Cache-aside: Ingest читает Redis; при промахе запрашивает App & Config и пишет
+  // в Redis с TTL. Push из App & Config в Redis не используется, см. arc42 §4.4.
+
+  // C1-level shortcuts (чёрный ящик)
+  app_owner -> telemetry 'configures & reads analytics' 'HTTPS'
+  mobile_app -> telemetry 'sends events, fetches config' 'HTTPS'
+  telemetry -[notifies]-> app_owner 'threshold alerts' 'HTTPS webhook'
+}

@@ -1,0 +1,142 @@
+@startuml er-data-model
+title Telemetry — модель данных по хранилищам (SoT)
+
+skinparam linetype ortho
+skinparam packageStyle rectangle
+left to right direction
+
+package "PostgreSQL (App & Config)" as pkg_pg {
+  entity "apps" as apps {
+    * app_id : text <<PK>>
+    --
+    * owner_id : text
+    * name : text
+    * platform : enum android|ios
+    * event_schema : jsonb
+    * sampling_rate : float
+    feature_flags : jsonb
+    * created_at : timestamptz
+    ==
+    UQ (owner_id, name)
+  }
+
+  entity "api_keys" as api_keys {
+    * key_id : text <<PK>>
+    --
+    * app_id : text <<FK>>
+    * key_hash : text
+    * status : enum active|revoked
+    * created_at : timestamptz
+  }
+
+  entity "funnel_definitions" as funnels {
+    * definition_id : text <<PK>>
+    --
+    * app_id : text <<FK>>
+    * name : text
+    * steps : jsonb
+    * updated_at : timestamptz
+  }
+
+  entity "metric_definitions" as metrics {
+    * definition_id : text <<PK>>
+    --
+    * app_id : text <<FK>>
+    * name : text
+    * spec : jsonb
+    * updated_at : timestamptz
+  }
+
+  entity "alert_rules" as alerts {
+    * alert_id : text <<PK>>
+    --
+    * app_id : text <<FK>>
+    * definition_id : text
+    * definition_type : enum funnel|metric
+    * condition : jsonb
+    * webhook_url : text
+    * webhook_secret_ref : text
+    * updated_at : timestamptz
+  }
+
+  entity "alert_state" as alert_state {
+    * alert_id : text <<PK, FK>>
+    --
+    last_checked_at : timestamptz
+    last_fired_at : timestamptz
+    cooldown_until : timestamptz
+    last_webhook_status : text
+    ==
+    runtime, не конфигурация владельца
+  }
+
+  entity "alert_scheduler_lease" as alert_lease {
+    * id : int <<PK>>
+    --
+    holder : text
+    leased_until : timestamptz
+    ==
+    одна строка на кластер
+  }
+
+  apps ||--o{ api_keys
+  apps ||--o{ funnels
+  apps ||--o{ metrics
+  apps ||--o{ alerts
+  alerts ||--|| alert_state
+}
+
+package "ClickHouse (SoT событий)" as pkg_ch {
+  entity "events" as events {
+    * app_id
+    * event_id
+    * received_at
+    --
+    event_name
+    event_time
+    user_id
+    session_id
+    app_version
+    platform
+    country
+    device_type
+    properties
+    ==
+    PARTITION BY toYYYYMMDD(received_at)
+    ORDER BY (app_id, event_time, event_id)
+    TTL 90 дней
+    shard key = app_id
+  }
+
+  entity "mv_dau_mau" as mv {
+    * app_id
+    * date
+    * platform
+    * app_version
+    --
+    dau_hll
+    mau_hll
+    ==
+    retention 2 года
+    без country (сайзинг A13)
+    тот же shard key = app_id
+  }
+}
+
+note as n_no_er
+  Redis — не сущности ER:
+  ключ/схема (TTL 5 мин),
+  event_id (TTL 6 ч),
+  rate-limit counters.
+  Не SoT.
+
+  Kafka events.raw —
+  буфер батчей, retention 12 ч.
+  Не долгосрочное хранилище.
+
+  app_id в events / mv_dau_mau —
+  logical ref на apps.app_id,
+  без физического FK между СУБД.
+end note
+
+@enduml

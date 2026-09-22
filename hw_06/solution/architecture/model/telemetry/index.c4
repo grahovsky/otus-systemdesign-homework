@@ -1,0 +1,78 @@
+// telemetry/index.c4 — система Telemetry и контейнеры (C2)
+
+model {
+  telemetry = system 'Telemetry' {
+    description 'Сервис телеметрии мобильных приложений: приём батчей событий от SDK,
+хранение сырых событий и расчёт воронок, retention, DAU/MAU.
+Минимальный рабочий контур: регистрация приложения → SDK получает конфиг →
+приём событий → хранение → аналитика. Класс — Product / Behavioral analytics
+(ориентир Amplitude), не APM.'
+
+    ingest = container 'Ingest API' {
+      description 'Приём батчей событий от SDK: HTTPS REST, gzip, валидация схемы события,
+проверка API-ключа и rate-limit per-app (кэш Redis; при промахе — App & Config Service),
+geo/device — по offline-базе (не внешний вызов). Публикует в Kafka. Latency p99 < 300 мс —
+без ожидания записи в ClickHouse.'
+    }
+
+    app_config = container 'App & Config Service' {
+      description 'Три обязанности на общих CRUD-метаданных в Postgres: регистрация
+приложений и API-ключей; per-app определения воронок/метрик; sampling rate и feature flags
+для SDK. Плюс CRUD `alert_rules` (порог на definition + webhookUrl) — та же таблица
+метаданных, не отдельный сервис. Один сервис, а не несколько: объём и владелец-актор
+(владелец приложения) общие.'
+    }
+
+    storage_writer = container 'Storage Writer' {
+      description 'Консьюмер Kafka → батчевая вставка в ClickHouse. Идемпотентная вставка/
+дедуп по `event_id` — экзекутор решения "идемпотентность вместо exactly-once" (requirements.md §1.3).'
+    }
+
+    query_api = container 'Query API' {
+      description 'Аналитика по зарегистрированным приложениям: funnel conversion, retention
+curve, DAU/MAU, разбивка по сегментам. Читает сырые события ClickHouse и определения воронок/
+метрик из App & Config Service. Latency p95 < 2 с. Периодически проверяет alert-правила
+тем же путём чтения и при срабатывании отправляет HMAC-webhook владельцу (не BI-платформа).'
+    }
+
+    kafka = container 'Kafka' {
+      #data
+      #async
+      description 'Буфер ingest → Storage Writer: топик `events.raw`. Сглаживает пики,
+at-least-once, держит запас на несколько часов простоя Storage Writer.'
+      style {
+        shape queue
+      }
+    }
+
+    clickhouse = container 'ClickHouse' {
+      #data
+      description 'SoT сырых событий: `events` (MergeTree, партиция по времени приёма на
+сервере, `ORDER BY (app_id, event_time)`), TTL 90 дней. Материализованные представления
+под DAU/MAU retention 2 года.'
+      style {
+        shape storage
+      }
+    }
+
+    postgres = container 'PostgreSQL' {
+      #data
+      description 'Метаданные App & Config Service: приложения, API-ключи, определения
+воронок/метрик, sampling/feature flags, `alert_rules` (`app_id`, `definition_id`,
+условие, `webhook_url`). Малый объём, нужен ACID.'
+      style {
+        shape storage
+      }
+    }
+
+    redis = container 'Redis' {
+      #data
+      description 'Кэш API-ключей/конфига приложения на hot path Ingest API (без синхронного
+вызова App & Config Service на каждый батч), дедуп-окно недавних `event_id` и счётчики
+rate-limit per-app.'
+      style {
+        shape storage
+      }
+    }
+  }
+}

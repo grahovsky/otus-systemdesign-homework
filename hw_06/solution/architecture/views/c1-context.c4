@@ -1,0 +1,21 @@
+// views/c1-context.c4 — System Context
+
+views {
+  view telemetry-c1 of telemetry {
+    title 'Telemetry — System Context (C1)'
+    description 'Сервис телеметрии как чёрный ящик. Акторы: владелец приложения (настраивает,
+читает аналитику, принимает пороговые webhook), Mobile App + SDK (технический источник
+событий, внешняя система). Класс — Product / Behavioral analytics.'
+
+    include telemetry with {
+      navigateTo telemetry-c2
+    }
+    include app_owner, mobile_app
+
+    include app_owner -> telemetry
+    include mobile_app -> telemetry
+    include telemetry -> app_owner
+
+    autoLayout TopBottom
+  }
+}

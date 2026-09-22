@@ -1,0 +1,6 @@
+# LikeC4 build artifacts
+out/
+dist/
+node_modules/
+*.tmp.svg
+*.tmp.png

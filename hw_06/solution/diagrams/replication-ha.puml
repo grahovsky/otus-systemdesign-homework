@@ -1,0 +1,69 @@
+@startuml replication-ha
+title Telemetry — репликация ClickHouse и PostgreSQL
+
+left to right direction
+skinparam defaultFontSize 12
+skinparam componentStyle rectangle
+
+rectangle "ClickHouse (events, mv_dau_mau) — шард N" as ch_block {
+  rectangle "Routing plane" as ch_routing {
+    component "Балансировщик /\nClickHouse-клиент\n(directory app_id → шард,\nисключает мёртвую реплику)" as ch_lb
+  }
+
+  rectangle "Control plane" as ch_control {
+    component "Keeper-ансамбль\n(3+ узла кворума)" as keeper
+  }
+
+  database "Реплика A\n(AZ1)" as ch_r1
+  database "Реплика B\n(AZ2)" as ch_r2
+  database "Реплика C\n(AZ3)" as ch_r3
+}
+
+component "Storage Writer" as writer
+component "Query API" as query
+
+rectangle "Регион B — объектное хранилище (DR)" as backup_store {
+  storage "Бэкап ClickHouse\nинкрементальный BACKUP, каждые 6 ч\nодна копия уникальных данных\nотдельный доступ, read-only" as backup
+}
+
+writer --> ch_lb : batch INSERT
+query --> ch_lb : SELECT funnel/retention/DAU-MAU
+ch_lb --> ch_r1
+ch_lb --> ch_r2
+ch_lb --> ch_r3
+
+ch_r1 <-r-> ch_r2 : insert_quorum=2\nACK двух из трёх → RPO ≈ 0
+ch_r2 <-r-> ch_r3
+keeper --> ch_r1 : регистрация вставленных\nparts, health-check
+keeper --> ch_r2 : регистрация вставленных\nparts, health-check
+keeper --> ch_r3 : регистрация вставленных\nparts, health-check
+
+ch_r1 ..> backup : инкрементальный BACKUP\nраз в 6 ч, новые parts
+
+note bottom of backup
+  Между регионами — не непрерывная
+  репликация: постоянная вторая копия
+  мульти-ТБ датасета удвоила бы самую
+  дорогую статью счёта (sizing.md §4).
+  RPO при DR: ≤5 мин для данных
+  последних 12 ч (страхует Kafka DR),
+  ≤6 ч для более старых (только бэкап).
+end note
+
+rectangle "PostgreSQL (App & Config)" as pg_block {
+  database "Primary\n(AZ1)" as pg_primary
+  database "Sync/semi-sync replica\n(AZ2)" as pg_sync
+  database "Async replica\n(регион B, DR)" as pg_async
+}
+
+pg_primary --> pg_sync : WAL, кворумный ACK\n→ RPO ≈ 0
+pg_primary --> pg_async : WAL, асинхронно\n→ RPO ≤5 мин (DR)
+
+note bottom of pg_block
+  Managed Multi-AZ "в один клик":
+  объём 40-50 МБ и RPS < 1
+  не окупают самодельный DCS-кворум,
+  как и в выборе движка (data-storage.md §2).
+end note
+
+@enduml
